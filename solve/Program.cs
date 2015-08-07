@@ -7,7 +7,15 @@ using System.Text;
 using System.Threading.Tasks;
 
 
-class Random
+static class Constants
+{
+    public static int GenerateGoalsMaxExamined = 100;
+    public static int GenerateGoalsMaxReturned = 20;
+    public static int ParseTreeLimit = 20;
+}
+
+
+public class Random
 {
     public Random(UInt32 seed)
     {
@@ -28,77 +36,26 @@ class Random
 }
 
 
-class Piece
-{
-    public Piece(Board board, Unit unit)
-    {
-        this.unit = (Unit)unit.Clone();
-        this.board = board;
-        this.history = new List<Unit>();
-    }
-
-    public bool canMove()
-    {
-        return false;
-    }
-
-    public bool rotate(bool clockwise = true)
-    {
-        return update(this.unit.rotate(clockwise));
-    }
-
-    public bool move(Cell direction)
-    {
-        return update(this.unit.move(direction));
-    }
-
-    private bool update(Unit newUnit)
-    {
-        var contained = board.contains(newUnit.members);
-        
-        if (contained)
-        {
-            unit = newUnit;
-        }
-        else
-        {
-            board.place(this.unit.members);
-        }
-
-        return contained;
-    }
-
-    private Unit unit;
-    private Board board;
-    private List<Unit> history;
-}
-
-
 class Board
 {
-    public Board(int width, int height, int score)
+    public Board(int width, int height)
     {
-        this.score = score;
+        this.score = 0;
         this.width = width;
         this.height = height;
-        clear();
+        this.data = new bool[width * height];
     }
 
-    public void clear()
+    public bool contains(Unit unit)
     {
-        data = new bool[width * height];
-    }
-
-    public bool contains(IEnumerable<Cell> cells)
-    {
-        foreach (var cell in cells)
+        foreach (var cell in unit.members)
         {
             bool contained = 
                 cell.x >= 0 &&
                 cell.y >= 0 &&
                 cell.x < width &&
                 cell.y < height &&
-                !data[cell.x + cell.y * width];
+                !this[cell.x, + cell.y];
             
             if (!contained)
             {
@@ -109,17 +66,38 @@ class Board
         return true;
     }
 
+    public bool canLock(Unit piece)
+    {
+        return 
+            !this.contains(piece.move(Cell.east)) ||
+            !this.contains(piece.move(Cell.west)) ||
+            !this.contains(piece.move(Cell.southeast)) ||
+            !this.contains(piece.move(Cell.southwest)) ||
+            !this.contains(piece.rotate(false)) ||
+            !this.contains(piece.rotate(true));
+    }
+
     public void place(IEnumerable<Cell> cells)
     {
+        // TODO return new object
+        // TODO drop lines
         foreach (var cell in cells)
         {
             data[cell.x + cell.y * width] = true;
         }
     }
 
+    public bool this[int x, int y]
+    {
+        get
+        {
+            return this.data[x + y * width];
+        }
+    }
+
     private bool[] data;
-    private int width;
-    private int height;
+    public int width;
+    public int height;
     public int score;
 }
 
@@ -157,7 +135,7 @@ class BoardTree : IComparable<BoardTree>
     public void walk(Action<BoardTree> fn)
     {
         var children = this.children;
-        if (children == null)
+        if (children != null)
         {
             return;
         }
@@ -202,7 +180,35 @@ class BoardTree : IComparable<BoardTree>
 
     private IEnumerable<Unit> generateGoals(Unit piece)
     {
-        throw new NotImplementedException();
+        var ans = new List<Unit>();
+
+        for (var y = board.height - 1; y >= 0; --y)
+        {
+            for (var x = 0; x < board.width; ++x)
+            {
+                var rotatedPiece = piece;
+                for (var i = 0; i < 6; ++i)
+                {
+                    foreach (var cell in rotatedPiece.members)
+                    {
+                        var movedPiece = rotatedPiece.move(new Cell(x - cell.x, y - cell.y));
+                        if (board.contains(movedPiece) && !ans.Contains(movedPiece) && board.canLock(movedPiece))
+                        {
+                            ans.Add(movedPiece);
+                        }
+                    }
+
+                    rotatedPiece = rotatedPiece.rotate();
+                }
+            }
+
+            if (ans.Count > Constants.GenerateGoalsMaxExamined)
+            {
+                break;
+            }
+        }
+
+        return ans.shuffle(new Random((UInt32)DateTime.UtcNow.Ticks)).Take(Constants.GenerateGoalsMaxReturned);
     }
 
     private BoardTree generatePath(Unit start, Unit end)
@@ -221,6 +227,9 @@ class BoardTree : IComparable<BoardTree>
 
 class Cell : IEquatable<Cell>
 {
+    public Cell() { }
+    public Cell(int x, int y) { this.x = x; this.y = y; }
+
     public int x { get; set; }
     public int y { get; set; }
 
@@ -230,17 +239,17 @@ class Cell : IEquatable<Cell>
         Func<int, int> odd = (a) => a & 1;
         int y2 = (dir * 4 * x + dir * 2 * odd(y) + 2 * y) / 4;
         int x2 = (2 * x + odd(y) - dir * y * 3 - odd(y2) * 2) / 4;
-        return new Cell() { x = x2, y = y2 };
+        return new Cell(x2, y2);
     }
 
     public static Cell operator-(Cell lhs, Cell rhs)
     {
-        return new Cell() { x = lhs.x - rhs.x, y = lhs.y - rhs.y };
+        return new Cell(lhs.x - rhs.x, lhs.y - rhs.y);
     }
 
     public static Cell operator +(Cell lhs, Cell rhs)
     {
-        return new Cell() { x = lhs.x + rhs.x, y = lhs.y + rhs.y };
+        return new Cell(lhs.x + rhs.x, lhs.y + rhs.y);
     }
 
     public bool Equals(Cell other)
@@ -248,11 +257,11 @@ class Cell : IEquatable<Cell>
         return this.x == other.x && this.y == other.y;
     }
 
-    public static Cell zero = new Cell() { x = 0, y = 0 };
-    public static Cell west = new Cell() { x = -1, y = 0 };
-    public static Cell east = new Cell() { x = 1, y = 0 };
-    public static Cell southwest = new Cell() { x = -1, y = 1 };
-    public static Cell southeast = new Cell() { x = 1, y = 1 };
+    public static Cell zero = new Cell(0, 0);
+    public static Cell west = new Cell(-1, 0);
+    public static Cell east = new Cell(1, 0);
+    public static Cell southwest = new Cell(-1, 1);
+    public static Cell southeast = new Cell(1, 1);
 }
 
 
@@ -280,13 +289,26 @@ class Unit : IEquatable<Unit>, ICloneable
         };
     }
 
-    public Unit rotate(bool clockwise)
+    public Unit rotate(bool clockwise = true)
     {
         return new Unit()
         {
             members = this.members.Select(i => (i - this.pivot).rotate(clockwise) + this.pivot).ToList(),
             pivot = pivot
         };
+    }
+
+    public Unit center(int width)
+    {
+        int y_min = members.Min(i => i.y);
+        int x_min = members.Min(i => i.x);
+        int x_max = members.Max(i => i.x);
+        return move(new Cell((width - x_max + x_min) / 2, -y_min));
+    }
+
+    public override string ToString()
+    {
+        return string.Join(",", members.Select(i => string.Format("[{0},{1}]", i.x, i.y)));
     }
 }
 
@@ -359,7 +381,7 @@ class CommandLineParams
 }
 
 
-class Program
+public static class Program
 {
     static void Main(string[] args)
     {
@@ -377,32 +399,30 @@ class Program
         Console.WriteLine(JsonConvert.SerializeObject(output));
     }
 
-    static IEnumerable<Unit> generateSource(List<Unit> units_, Random rand)
+    public static IEnumerable<T> shuffle<T>(this IEnumerable<T> input_, Random rand)
     {
-        var units = units_.ToList();
-        var ans = new List<Unit>(units.Count);
-        
-        while (units.Any())
+        var input = input_.ToList();
+        while (input.Any())
         {
-            int index = (int)(rand.next() % units.Count);
-            ans.Add(units[index]);
-            units.RemoveAt(index);
+            int index = (int)(rand.next() % input.Count);
+            yield return input[index];
+            input.RemoveAt(index);
         }
-        
-        return ans;
     }
 
     static AnnotatedOutput solve(Input input, UInt32 seed)
     {
-        var source = generateSource(input.units, new Random(seed));
+        var source = input.units.shuffle(new Random(seed));
 
-        var tree = new BoardTree(new Board(input.width, input.height, 0));
+        var tree = new BoardTree(new Board(input.width, input.height));
 
-        foreach (var piece in source)
+        foreach (var piece_ in source)
         {
+            var piece = piece_.center(input.width);
+
             bool finished = true;
             tree.walk(i => finished &= !i.expand(piece));
-            tree.prune(20);
+            tree.prune(Constants.ParseTreeLimit);
 
             if (finished)
             {
