@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 
 
@@ -847,9 +846,13 @@ class CommandLineParams
                     argsEnum.MoveNext();
                     cores = int.Parse(argsEnum.Current);
                     break;
-                case "-s":
+                
+                // Nonstandard options:
+                case "-r":
                     argsEnum.MoveNext();
-                    seedToShow = UInt32.Parse(argsEnum.Current);
+                    randomSeed = UInt32.Parse(argsEnum.Current);
+                    break;
+                case "-s":
                     argsEnum.MoveNext();
                     movesToShow = argsEnum.Current;
                     break;
@@ -862,7 +865,7 @@ class CommandLineParams
     public int megabyteLimit { get; set; }
     public List<string> phrasesOfPower { get; set; }
     public int cores { get; set; }
-    public UInt32 seedToShow { get; set; }
+    public UInt32? randomSeed { get; set; }
     public string movesToShow { get; set; }
 }
 
@@ -919,9 +922,9 @@ public static class Program
             });
 
         string solution = "";
-        ans.walkFromRoot(i => solution = solution + i.path + "/");
+        ans.walkFromRoot(i => solution = solution + i.path);
 
-        Show(input, seed, solution.Replace("/", ""));
+        //Show(input, seed, solution.Replace("/", ""));
 
         return new AnnotatedOutput()
         {
@@ -1008,32 +1011,14 @@ public static class Program
 
         if (commandLineParams.movesToShow != null)
         {
-            Show(input, commandLineParams.seedToShow, commandLineParams.movesToShow);
+            Show(input, commandLineParams.randomSeed.Value, commandLineParams.movesToShow);
             return;
         }
 
-        var threads = new List<Thread>();
-        var output = new List<AnnotatedOutput>();
-        foreach (var seed_ in input.sourceSeeds)
-        {
-            var seed = seed_;
-            var thread = new Thread(() =>
-                {
-                    var ans = solve(commandLineParams, input, seed);
-                    lock (output)
-                    {
-                        output.Add(ans);
-                    }
-                });
-            
-            threads.Add(thread);
-            thread.Start();
-        }
-
-        foreach (var thread in threads)
-        {
-            thread.Join();
-        }
+        var output = input.sourceSeeds
+            .Where(seed => !commandLineParams.randomSeed.HasValue || seed == commandLineParams.randomSeed.Value)
+            .Select(seed => solve(commandLineParams, input, seed))
+            .ToList();
 
         Console.WriteLine(JsonConvert.SerializeObject(output, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }));
     }

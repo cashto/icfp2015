@@ -7,8 +7,14 @@ g = JSON.parse(
 
 apiToken = 'rTtrTF3dLjQK/pN16VMLkg6zxstoXlwOUa06jqRVr48='
 teamId = 183
-problems = ('problem_' + i for i in [0 .. 23])
-#problems = ('problem_' + i for i in [12, 14, 2, 3, 5, 6, 7])
+problemFiles = ('problem_' + i for i in [0 .. 23])
+
+problems = []
+for file in problemFiles
+    input = JSON.parse(
+        fs.readFileSync("../problems/#{file}.json"), { encoding: 'utf8' })
+    for seed in input.sourceSeeds
+        problems.push { file: file, seed: seed }
 
 phrasesOfPower = ['Ei!']
 concurrency = os.cpus().length
@@ -31,9 +37,11 @@ upload = (problemKey, ans) ->
 runOne = (problem, cb) ->
     cmd = []
     cmd.push('-f')
-    cmd.push "../problems/#{problem}.json"
+    cmd.push "../problems/#{problem.file}.json"
+    cmd.push('-r')
+    cmd.push problem.seed
     cmd.push('-t')
-    cmd.push('600')
+    cmd.push('60')
     for phrase in phrasesOfPower
         cmd.push('-p')
         cmd.push(phrase)
@@ -44,7 +52,7 @@ runOne = (problem, cb) ->
         answers = JSON.parse(stdout)
         
         for ans in answers
-            problemKey = "#{problem}-#{ans.output.seed}"
+            problemKey = "#{problem.file}-#{ans.output.seed}"
             data = g.solutions[problemKey] or { history: [] }
             data.history.push(ans)
             
@@ -77,17 +85,17 @@ class Runner
 onComplete = ->
     fs.writeFileSync('../work/g.json', JSON.stringify(g))
 
-#runner = new Runner(problems, onComplete)
-#for i in [1 .. concurrency] 
-#    runner.startOne()
+runner = new Runner(problems, onComplete)
+for i in [1 .. concurrency] 
+    runner.startOne()
 
-for problem in problems
-    ans = []
-    for key,value of g.solutions
-        if key.substr(0, problem.length + 1) == problem + '-'
-            ans.push(value.best.output)
-    #console.log ans
-    #console.log '------'
+#for problem in problems
+#    ans = []
+#    for key,value of g.solutions
+#        if key.substr(0, problem.length + 1) == problem + '-'
+#            ans.push(value.best.output)
+#    #console.log ans
+#    #console.log '------'
     
-    upload("", ans)
-    #console.log JSON.stringify(value.best.output)
+#    upload("", ans)
+#    #console.log JSON.stringify(value.best.output)
