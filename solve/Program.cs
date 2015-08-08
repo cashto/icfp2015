@@ -9,9 +9,9 @@ using System.Threading.Tasks;
 
 static class Constants
 {
-    public static int GenerateGoalsMaxExamined = 100;
+    public static int GenerateGoalsMinExamined = 100;
     public static int GenerateGoalsMaxReturned = 20;
-    public static int ParseTreeLimit = 20;
+    public static int PruneTreeLimit = 20;
 }
 
 
@@ -25,7 +25,7 @@ class PriorityQueue<T>
 
     public bool isEmpty()
     {
-        return this.items.Any();
+        return !this.items.Any();
     }
 
     public void push(T obj)
@@ -156,12 +156,13 @@ class Board
             !this.contains(piece.rotate(true));
     }
 
-    public Board place(IEnumerable<Cell> cells)
+    public Board place(Unit piece)
     {
         Board ans = new Board(this);
 
         // TODO drop lines
-        foreach (var cell in cells)
+        // TODO calculate score
+        foreach (var cell in piece.members)
         {
             ans.data[cell.x + cell.y * width] = true;
         }
@@ -191,11 +192,30 @@ class BoardTree : IComparable<BoardTree>
         this.parent = parent;
         this.board = board;
         this.path = path;
+        
+        this.heuristicScore = 0;
+        for (var y = 0; y < board.height; y++)
+        {
+            for (var x = 0; x < board.width; x++)
+            {
+                if (!board[x, y])
+                {
+                    heuristicScore += y;
+                }
+            }
+        }
     }
 
     public int CompareTo(BoardTree other)
     {
-        return other.board.score - this.board.score;
+        return this.heuristicScore - other.heuristicScore;
+    }
+
+    public override string ToString()
+    {
+        int nodes = 0;
+        walk(i => ++nodes);
+        return string.Format("path={0}, heuristicScore={1}, nodes={2}", this.path, this.heuristicScore, nodes);
     }
 
     public bool expand(Unit unit)
@@ -217,16 +237,15 @@ class BoardTree : IComparable<BoardTree>
     public void walk(Action<BoardTree> fn)
     {
         var children = this.children;
-        if (children != null)
-        {
-            return;
-        }
 
         fn(this);
 
-        foreach (var child in children)
+        if (children != null)
         {
-            child.walk(fn);
+            foreach (var child in children)
+            {
+                child.walk(fn);
+            }
         }
     }
 
@@ -240,10 +259,17 @@ class BoardTree : IComparable<BoardTree>
         fn(this);
     }
 
-    public IEnumerable<BoardTree> getBestNodes()
+    public IEnumerable<BoardTree> getBestLeafNodes()
     {
         var allNodes = new List<BoardTree>();
-        walk(i => allNodes.Add(i));
+        walk(i => 
+            {
+                if (i.children == null)
+                {
+                    allNodes.Add(i);
+                }
+            });
+
         allNodes.Sort();
         return allNodes;
     }
@@ -252,12 +278,18 @@ class BoardTree : IComparable<BoardTree>
     {
         walk(i => i.mark = true);
 
-        foreach (var node in getBestNodes().Take(n))
+        foreach (var node in getBestLeafNodes().Take(n))
         {
             node.walkFromRoot(i => i.mark = false);
         }
 
-        walk(boardTree => boardTree.children = boardTree.children.Where(child => !child.mark).ToList());
+        walk(boardTree => 
+            {
+                if (boardTree.children != null)
+                {
+                    boardTree.children = boardTree.children.Where(child => !child.mark).ToList();
+                }
+            });
     }
 
     private IEnumerable<Unit> generateGoals(Unit piece)
@@ -284,7 +316,7 @@ class BoardTree : IComparable<BoardTree>
                 }
             }
 
-            if (ans.Count > Constants.GenerateGoalsMaxExamined)
+            if (ans.Count > Constants.GenerateGoalsMinExamined)
             {
                 break;
             }
@@ -295,21 +327,22 @@ class BoardTree : IComparable<BoardTree>
 
     private BoardTree generatePath(Unit start, Unit end)
     {
-        var pq = new PriorityQueue<GeneratePathNode>((i, j) => i.score(end) > j.score(end));
-        pq.push(new GeneratePathNode(start));
+        var pq = new PriorityQueue<GeneratePathNode>((i, j) => i.score(start) > j.score(start));
+        pq.push(new GeneratePathNode(end));
 
         while (!pq.isEmpty())
         {
             var item = pq.pop();
 
-            foreach (var c in allDirections)
+            foreach (var c in allReverseDirections)
             {
                 var newNode = new GeneratePathNode(item, c);
-                if (newNode.Piece.Equals(end))
+                if (newNode.Piece.Equals(start))
                 {
+                    // TODO: lock the piece
                     return new BoardTree(
-                        board.place(newNode.Piece.members),
-                        path,
+                        board.place(newNode.Piece),
+                        reversePath(newNode.getPath()),
                         this);
                 }
 
@@ -322,6 +355,29 @@ class BoardTree : IComparable<BoardTree>
 
         return null;
     }
+
+    private static string reversePath(string s)
+    {
+        var sb = new StringBuilder();
+
+        foreach (var c in s)
+        {
+            switch (c)
+            {
+                case 'p': sb.Append('b'); break;
+                case 'b': sb.Append('p'); break;
+                case 'a': sb.Append('7'); break;
+                case 'l': sb.Append('6'); break;
+                case 'd': sb.Append('k'); break;
+                case 'k': sb.Append('d'); break;
+                case '6': sb.Append('l'); break;
+                case '7': sb.Append('a'); break;
+            }
+        }
+
+        return sb.ToString();
+    }
+
 
     class GeneratePathNode
     {
@@ -354,6 +410,12 @@ class BoardTree : IComparable<BoardTree>
                     break;
                 case 'l':
                     this.Piece = parent.Piece.move(Cell.southeast);
+                    break;
+                case '6':
+                    this.Piece = parent.Piece.move(Cell.northwest);
+                    break;
+                case '7':
+                    this.Piece = parent.Piece.move(Cell.northeast);
                     break;
                 case 'd':
                     this.Piece = parent.Piece.rotate(true);
@@ -406,6 +468,16 @@ class BoardTree : IComparable<BoardTree>
         {
             return !Piece.Equals(node.Piece) && (Parent == null || Parent.isLegal(node));
         }
+
+        public string getPath()
+        {
+            if (Parent == null)
+            {
+                return "";
+            }
+
+            return Parent.getPath() + this.Move;
+        }
     }
 
     public Board board;
@@ -414,8 +486,9 @@ class BoardTree : IComparable<BoardTree>
     private BoardTree parent;
     private List<BoardTree> children;
     private bool mark;
+    private int heuristicScore;
 
-    private static string allDirections = "pbaldk";
+    private static string allReverseDirections = "pb67dk";
 }
 
 
@@ -456,6 +529,8 @@ class Cell : IEquatable<Cell>
     public static Cell east = new Cell(1, 0);
     public static Cell southwest = new Cell(-1, 1);
     public static Cell southeast = new Cell(1, 1);
+    public static Cell northwest = new Cell(-1, -1);
+    public static Cell northeast = new Cell(1, -1);
 }
 
 
@@ -584,12 +659,10 @@ public static class Program
         var input = JsonConvert.DeserializeObject<Input>(
             File.ReadAllText(commandLineParams.inputFilename));
 
-        var output = new List<AnnotatedOutput>();
-        foreach (var seed in input.sourceSeeds)
-        {
-            solve(input, seed);
-        }
-
+        var output = input.sourceSeeds
+            .Select(seed => solve(input, seed))
+            .ToList();
+            
         Console.WriteLine(JsonConvert.SerializeObject(output));
     }
 
@@ -612,11 +685,12 @@ public static class Program
 
         foreach (var piece_ in source)
         {
+            Console.WriteLine("solving {0}", tree);
             var piece = piece_.center(input.width);
 
             bool finished = true;
             tree.walk(i => finished &= !i.expand(piece));
-            tree.prune(Constants.ParseTreeLimit);
+            tree.prune(Constants.PruneTreeLimit);
 
             if (finished)
             {
@@ -624,7 +698,8 @@ public static class Program
             }
         }
 
-        BoardTree ans = tree.getBestNodes().First();
+        // TODO: get deepest result.
+        BoardTree ans = tree.getBestLeafNodes().First();
         string solution = "";
         ans.walkFromRoot(i => solution = solution + i.path);
 
