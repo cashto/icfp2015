@@ -17,9 +17,15 @@ static class Constants
 
 class PriorityQueue<T>
 {
-    PriorityQueue(Func<T, T, bool> lessFn)
+    public PriorityQueue(Func<T, T, bool> lessFn)
     {
         this.lessFn = lessFn;
+        this.items = new List<T>();
+    }
+
+    public bool isEmpty()
+    {
+        return this.items.Any();
     }
 
     public void push(T obj)
@@ -111,6 +117,14 @@ class Board
         this.data = new bool[width * height];
     }
 
+    private Board(Board other)
+    {
+        this.score = 0; 
+        this.width = other.width;
+        this.height = other.height;
+        this.data = other.data.ToArray();
+    }
+
     public bool contains(Unit unit)
     {
         foreach (var cell in unit.members)
@@ -142,14 +156,17 @@ class Board
             !this.contains(piece.rotate(true));
     }
 
-    public void place(IEnumerable<Cell> cells)
+    public Board place(IEnumerable<Cell> cells)
     {
-        // TODO return new object
+        Board ans = new Board(this);
+
         // TODO drop lines
         foreach (var cell in cells)
         {
-            data[cell.x + cell.y * width] = true;
+            ans.data[cell.x + cell.y * width] = true;
         }
+
+        return ans;
     }
 
     public bool this[int x, int y]
@@ -278,7 +295,117 @@ class BoardTree : IComparable<BoardTree>
 
     private BoardTree generatePath(Unit start, Unit end)
     {
-        throw new NotImplementedException();
+        var pq = new PriorityQueue<GeneratePathNode>((i, j) => i.score(end) > j.score(end));
+        pq.push(new GeneratePathNode(start));
+
+        while (!pq.isEmpty())
+        {
+            var item = pq.pop();
+
+            foreach (var c in allDirections)
+            {
+                var newNode = new GeneratePathNode(item, c);
+                if (newNode.Piece.Equals(end))
+                {
+                    return new BoardTree(
+                        board.place(newNode.Piece.members),
+                        path,
+                        this);
+                }
+
+                if (item.isLegal(newNode))
+                {
+                    pq.push(newNode);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    class GeneratePathNode
+    {
+        public GeneratePathNode Parent { get; set; }
+        public Unit Piece { get; set; }
+        public Char Move { get; set; }
+        public int Length { get; set; }
+
+        public GeneratePathNode(Unit piece)
+        {
+            this.Piece = piece;
+        }
+
+        public GeneratePathNode(GeneratePathNode parent, char c)
+        {
+            this.Parent = parent;
+            this.Move = c;
+            this.Length = parent.Length + 1;
+
+            switch (c)
+            {
+                case 'p':
+                    this.Piece = parent.Piece.move(Cell.west);
+                    break;
+                case 'b':
+                    this.Piece = parent.Piece.move(Cell.east);
+                    break;
+                case 'a':
+                    this.Piece = parent.Piece.move(Cell.southwest);
+                    break;
+                case 'l':
+                    this.Piece = parent.Piece.move(Cell.southeast);
+                    break;
+                case 'd':
+                    this.Piece = parent.Piece.rotate(true);
+                    break;
+                case 'k':
+                    this.Piece = parent.Piece.rotate(false);
+                    break;
+            }
+        }
+
+        public int score(Unit other)
+        {
+            Cell pivotDistance = other.pivot - Piece.pivot;
+            return Math.Abs(pivotDistance.x) + Math.Abs(pivotDistance.y) + rotateDistance(other) + Length;
+        }
+
+        private int rotateDistance(Unit other)
+        {
+            if (other.Equals(Piece))
+            {
+                return 0;
+            }
+
+            var rotateCw = other.rotate(true);
+            if (rotateCw.Equals(Piece))
+            {
+                return 1;
+            }
+
+            var rotateCcw = other.rotate(false);
+            if (rotateCcw.Equals(Piece))
+            {
+                return 1;
+            }
+
+            if (rotateCw.rotate(true).Equals(Piece))
+            {
+                return 2;
+            }
+
+            if (rotateCcw.rotate(false).Equals(Piece))
+            {
+                return 2;
+            }
+
+            return 3;
+        }
+
+        public bool isLegal(GeneratePathNode node)
+        {
+            return !Piece.Equals(node.Piece) && (Parent == null || Parent.isLegal(node));
+        }
     }
 
     public Board board;
@@ -287,6 +414,8 @@ class BoardTree : IComparable<BoardTree>
     private BoardTree parent;
     private List<BoardTree> children;
     private bool mark;
+
+    private static string allDirections = "pbaldk";
 }
 
 
