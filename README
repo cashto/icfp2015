@@ -1,3 +1,9 @@
 cashto -- cashto@gmail.com -- Chris Ashton -- Seattle, WA
 
-TODO: add notes
+Strategy: 
+    1. Given a piece and a board, generate a set of "goal" states for the piece (heuristic: the more empty spaces at the top of the board, the better).
+    2. For each goal state, generate a path (using A*) to that goal state (actually, from end state to start state, and then reverse the path).
+    3. Repeat 1 and 2 for each piece, building a tree of possible moves.
+    4. Prune the tree to keep only the "n" best solutions found so far.
+
+Soooo many hours wasted in bugs where I confuse absolute coordinates with relative coordinates (e.g., 3 moves NW, 2 moves E) on a hex grid.

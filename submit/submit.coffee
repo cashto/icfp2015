@@ -7,7 +7,9 @@ g = JSON.parse(
 
 apiToken = 'rTtrTF3dLjQK/pN16VMLkg6zxstoXlwOUa06jqRVr48='
 teamId = 183
-problems = ('problem_' + i for i in [0 .. 23])
+#problems = ('problem_' + i for i in [0 .. 23])
+problems = ('problem_' + i for i in [12, 14, 2, 3, 5, 6, 7])
+
 phrasesOfPower = ['Ei!']
 concurrency = os.cpus().length
 
@@ -27,6 +29,8 @@ runOne = (problem, cb) ->
     cmd = []
     cmd.push('-f')
     cmd.push "../problems/#{problem}.json"
+    cmd.push('-t')
+    cmd.push('600')
     for phrase in phrasesOfPower
         cmd.push('-p')
         cmd.push(phrase)

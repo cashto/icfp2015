@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 
@@ -431,7 +432,7 @@ class BoardTree : IComparable<BoardTree>
 
             //Console.WriteLine("{0}, score={1}", item, item.score(start));
 
-            if (++z % 500 == 0)
+            if (++z % 800 == 0)
             {
                 //Console.WriteLine("BREAK");
             }
@@ -441,6 +442,7 @@ class BoardTree : IComparable<BoardTree>
                 var newNode = new GeneratePathNode(item, c);
                 if (newNode.Piece.Equals(start))
                 {
+                    //Console.WriteLine(z);
                     char lockingMove = Constants.ForwardMoves.First(i => willLock(rootNode, i));
                     var ans = new BoardTree(
                         board.place(end),
@@ -865,7 +867,7 @@ public static class Program
         }
     }
 
-    static AnnotatedOutput solve(Input input, UInt32 seed)
+    static AnnotatedOutput solve(CommandLineParams commandLineParams, Input input, UInt32 seed)
     {
         var source = new List<Unit>();
         var rand = new Random(seed);
@@ -875,6 +877,7 @@ public static class Program
         }
 
         var tree = new BoardTree(new Board(input.width, input.height));
+        var startTime = DateTime.UtcNow;
 
         foreach (var piece_ in source)
         {
@@ -885,7 +888,7 @@ public static class Program
             tree.walk(i => finished &= !i.expand(piece));
             tree.prune(Constants.PruneTreeLimit);
 
-            if (finished)
+            if (finished || DateTime.UtcNow - startTime > commandLineParams.timeLimit)
             {
                 break;
             }
@@ -978,9 +981,28 @@ public static class Program
         var input = JsonConvert.DeserializeObject<Input>(
             File.ReadAllText(commandLineParams.inputFilename));
 
-        var output = input.sourceSeeds
-            .Select(seed => solve(input, seed))
-            .ToList();
+        var threads = new List<Thread>();
+        var output = new List<AnnotatedOutput>();
+        foreach (var seed_ in input.sourceSeeds)
+        {
+            var seed = seed_;
+            var thread = new Thread(() =>
+                {
+                    var ans = solve(commandLineParams, input, seed);
+                    lock (output)
+                    {
+                        output.Add(ans);
+                    }
+                });
+            
+            threads.Add(thread);
+            thread.Start();
+        }
+
+        foreach (var thread in threads)
+        {
+            thread.Join();
+        }
 
         Console.WriteLine(JsonConvert.SerializeObject(output, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }));
     }
