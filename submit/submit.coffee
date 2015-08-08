@@ -21,7 +21,7 @@ upload = (problemKey, ans) ->
     ]
     
     execFile 'curl', args, null, (error, stdout, stderr) ->
-        console.log "#{problemKey}: #{stdout} (#{error})"
+        console.log "   #{problemKey}: #{stdout} (#{error})"
 
 runOne = (problem, cb) ->
     cmd = []
@@ -46,7 +46,7 @@ runOne = (problem, cb) ->
             newHigh = '[NEW HIGH]' if ans.score > bestScore
             newHigh = '[HIGH]' if ans.score is bestScore
             
-            console.log "   #{problemKey}: #{bestScore} -> #{ans.score} #{newHigh}"
+            console.log "#{problemKey}: #{bestScore} -> #{ans.score} #{newHigh}"
             
             if ans.score >= bestScore
                 data.best = ans

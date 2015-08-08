@@ -447,36 +447,36 @@ class BoardTree : IComparable<BoardTree>
                         reversePath(newNode.getPath().Reverse()) + lockingMove,
                         this);
 
-                    var checkBoard = board;
-                    var piece = start;
-                    foreach (var ch in ans.path)
-                    {
-                        var nextBoard = checkBoard.place(piece);
-                        //Console.WriteLine(nextBoard);
-                        //Console.WriteLine("----- Making move {0} -----", ch);
+                    //var checkBoard = board;
+                    //var piece = start;
+                    //foreach (var ch in ans.path)
+                    //{
+                    //    var nextBoard = checkBoard.place(piece);
+                    //    //Console.WriteLine(nextBoard);
+                    //    //Console.WriteLine("----- Making move {0} -----", ch);
 
-                        var nextPiece = piece.go(ch);
-                        var backPiece = nextPiece.go(reversePath(ch.ToString())[0]);
+                    //    var nextPiece = piece.go(ch);
+                    //    var backPiece = nextPiece.go(reversePath(ch.ToString())[0]);
 
-                        if (!piece.Equals(backPiece))
-                        {
-                            throw new Exception();
-                        }
+                    //    if (!piece.Equals(backPiece))
+                    //    {
+                    //        throw new Exception();
+                    //    }
 
-                        if (!checkBoard.contains(nextPiece))
-                        {
-                            checkBoard = nextBoard;
-                        }
-                        else
-                        {
-                            piece = nextPiece;
-                        }
-                    }
+                    //    if (!checkBoard.contains(nextPiece))
+                    //    {
+                    //        checkBoard = nextBoard;
+                    //    }
+                    //    else
+                    //    {
+                    //        piece = nextPiece;
+                    //    }
+                    //}
 
-                    if (ans.board.ToString() != checkBoard.ToString())
-                    {
-                        throw new Exception();
-                    }
+                    //if (ans.board.ToString() != checkBoard.ToString())
+                    //{
+                    //    throw new Exception();
+                    //}
 
                     return ans;
                 }
@@ -921,7 +921,7 @@ public static class Program
 
     static void Test()
     {
-        var moves = "aaaaaaaaapaaaaaaaaaappppapaaddaaapaapaapppppaaakakpaapapppppadlaaaaaadppaaaaaaaaddapppbaaaadaaaapppaaaddaaaaapppplaapaapaapdadapppppaaaakpkaaakpppakalaaaaplapaapaapappppakalaaaappppakaaaaaakakppppplaadaaadaappadaapaadpaappppadaapaapaappppaaaaaaapaaaaaaaaddpaaadaaaaadapppppllkaaapapaaaladadapppaapaapaapaapppplakaaaaakpaaadpdapplakaaaapppppddpaapadpapppppaadppadaaaappaapadpaapaapppplaaaakppaaadaaaadpdppadallaapaaaapkpkpaappppaapaapaapaappppppaaaaaaaappppapaapaapaapppppaaaalaapapaaaaakkpppppalaaaakaappplaaaaadpallaaplladaaapppplaaddapaappppblkaakaakpaapppbapaapkapappppaakkaaaallaaapbdadaaaaappppkaakapaakkpaapppppaapaapaapppplaaaadappkaaaaapaaaaaaddppppaaaappbaallapaaaaaappppdaaapaapdpdpaapppbddpaapaapadpppppaakpaapapppppdadaaadadpppallaapapaapaapaappppakakaaaapakppppppaapaapaappppkaaaaakaaplaaaadlpaaaakapppppaaapaapaapppppkkaaaaappppaaaaaadpaaakkpaapaappppbdaaaaaappppaalaadddppaaaaaapppapaapaapaapppppddpaakkpaapaapppppakaaaalapaaaaaaapppplakaakaaaapkaaapaddapaapppppakaalkkaaaaapaapadpaapppppddladaaadppplakklaaaaaaappppplaaaaapppppdaapaapaapkpkpppplakaaaappppapadaaapaapppppkalaaaaadppppkaaaakppppllalakakppalakklpakapaapaapddpaapppppalaaaadppapaakkpaapaapaapppppakalaaaappppblaalaaappaaaaaapapppppakkaaapaappppp";
+        var moves = "lllaaalllabllaaalaalbdadllllllllpaaaaakkalbaaaaaaaddapaddlllllldllpllllklllllbaakalaaallbaaaakaaapakkalllllpaaaaalplllkllllpkkllllllapalllkaaallballdaallapaaaalaakaldpblllllkllllpbkaalaaalpdaldlllllappllllllkkappaakaaaalpdldlllllallpakaaaalalpaaaalallppaaddalllpbbllllallbdaadllllpllllllkpaaaaadaalppadaadpdaaaapbblllldlllpaallaalllaaallkkallpaaaaaalllpaaaaallllabbddlllllllapaaaaaaallpddaaalldlaplllllldlpblaaaaaakllbpkaaaaaaapaaaaaallpaaaakaaaplllllllllpaalaallbbkllllllbaaaallapkllblllllabblldaaaldllapadallllllpaaalaaaadppkaaaaallabllllllllblalllklaplllllllplllkaaaakaapaaaaaakapaaaallllpkalkklaallppdaaaaaaalppdaallddlpbldlllaalapbkkllalllllpaaaaaalapdllaaallppdaaaaallapkkalllllapblllllllalbbkllllalpdlllllllapaaallldllpaaaaaalalppdaaalldalbaallllllddpblllllaalapbdlldlllllllbaaaaaalalpalllldlllpdaaalaaldalapkkaaalaaapblaaaalallpbkkllalllllplllllldaapaakaaaaappdaallllllablllallapbllkaaaaapallllalllpdaaaalaaapalaaaallkplldldlllplkkllkalllpaaaadaaapblkaaaalllpalklalaallpbllkkaallaalpdllldlllllpaalaaalpkpkaaaaaaapaaddala";
 
         var input = JsonConvert.DeserializeObject<Input>(
             File.ReadAllText("../problems/problem_0.json"));
