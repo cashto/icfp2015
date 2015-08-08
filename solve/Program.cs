@@ -442,38 +442,12 @@ class BoardTree : IComparable<BoardTree>
             this.Parent = parent;
             this.Move = c;
             this.Length = parent.Length + 1;
-
-            switch (c)
-            {
-                case 'p':
-                    this.Piece = parent.Piece.move(Cell.west);
-                    break;
-                case 'b':
-                    this.Piece = parent.Piece.move(Cell.east);
-                    break;
-                case 'a':
-                    this.Piece = parent.Piece.move(Cell.southwest);
-                    break;
-                case 'l':
-                    this.Piece = parent.Piece.move(Cell.southeast);
-                    break;
-                case '6':
-                    this.Piece = parent.Piece.move(Cell.northwest);
-                    break;
-                case '7':
-                    this.Piece = parent.Piece.move(Cell.northeast);
-                    break;
-                case 'd':
-                    this.Piece = parent.Piece.rotate(true);
-                    break;
-                case 'k':
-                    this.Piece = parent.Piece.rotate(false);
-                    break;
-            }
+            this.Piece = parent.Piece.go(c);
         }
 
         public int score(Unit other)
         {
+            // TODO distance between hex points isn't manhattan distance
             Cell pivotDistance = Piece.pivot - other.pivot;
             return Math.Abs(pivotDistance.x) + Math.Abs(pivotDistance.y) + rotateDistance(other.move(pivotDistance)) + Length;
         }
@@ -570,11 +544,11 @@ class Cell : IEquatable<Cell>
             lhs.y - rhs.y);
     }
 
-    public static Cell operator +(Cell lhs, Cell rhs)
+    public static Cell operator+(Cell lhs, Cell rhs)
     {
         var y = lhs.y + rhs.y;
         return new Cell(
-            lhs.x + lhs.y / 2 - y / 2,
+            lhs.x + rhs.x + y / 2 - lhs.y / 2,
             y);
     }
 
@@ -583,13 +557,12 @@ class Cell : IEquatable<Cell>
         return this.x == other.x && this.y == other.y;
     }
 
+    public override string ToString()
+    {
+        return string.Format("{0},{1}", x, y);
+    }
+
     public static Cell zero = new Cell(0, 0);
-    public static Cell west = new Cell(-1, 0);
-    public static Cell east = new Cell(1, 0);
-    public static Cell southwest = new Cell(-1, 1);
-    public static Cell southeast = new Cell(1, 1);
-    public static Cell northwest = new Cell(-1, -1);
-    public static Cell northeast = new Cell(1, -1);
 }
 
 
