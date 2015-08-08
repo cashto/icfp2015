@@ -22,7 +22,7 @@ static class Constants
     public const char Clockwise = 'd';
     public const char CounterClockwise = 'k';
     public const string ForwardMoves = "pbaldk";
-    public const string ReverseMoves = "pb67dk";
+    public const string ReverseMoves = "67dkpb";
 }
 
 
@@ -36,11 +36,6 @@ class PriorityQueue<T>
 
     public bool isEmpty()
     {
-        if (items.Count > 100000)
-        {
-            return false;
-        }
-
         return !this.items.Any();
     }
 
@@ -370,9 +365,20 @@ class BoardTree : IComparable<BoardTree>
         var rootNode = new GeneratePathNode(end);
         pq.push(rootNode);
 
+        int z = 0;
+
+        Console.WriteLine("{0} -> {1}", end, start);
+
         while (!pq.isEmpty())
         {
             var item = pq.pop();
+
+            Console.WriteLine("{0}, score={1}", item, item.score(start));
+
+            if (++z % 100 == 0)
+            {
+                Console.WriteLine("BREAK");
+            }
 
             foreach (var c in Constants.ReverseMoves)
             {
@@ -386,8 +392,9 @@ class BoardTree : IComparable<BoardTree>
                         this);
                 }
 
-                if (item.isLegal(newNode))
+                if (board.contains(newNode.Piece) && item.isLegal(newNode))
                 {
+                    //Console.WriteLine("adding {0}, score={1}", newNode, newNode.score(start));
                     pq.push(newNode);
                 }
             }
@@ -447,9 +454,9 @@ class BoardTree : IComparable<BoardTree>
 
         public int score(Unit other)
         {
-            // TODO distance between hex points isn't manhattan distance
-            Cell pivotDistance = Piece.pivot - other.pivot;
-            return Math.Abs(pivotDistance.x) + Math.Abs(pivotDistance.y) + rotateDistance(other.move(pivotDistance)) + Length;
+            var p1 = Piece.pivot;
+            var p2 = other.pivot;
+            return p1.distance(p2) + rotateDistance(other.move(p1 - p2)) + Length;
         }
 
         private int rotateDistance(Unit other)
@@ -532,9 +539,21 @@ class Cell : IEquatable<Cell>
         return new Cell(x2, y2);
     }
 
-    public static int distance(Cell other)
+    public int distance(Cell other)
     {
-        throw new NotImplementedException();
+        if (other.y < this.y)
+        {
+            return other.distance(this);
+        }
+
+        var dy = other.y - this.y;
+        var sw = other + new Cell(-dy, dy);
+        var se = other + new Cell(0, dy);
+
+        return dy +
+            (other.x < sw.x ? sw.x - other.x :
+            other.x > se.x ? other.x - se.x :
+            0);
     }
 
     public static Cell operator-(Cell lhs, Cell rhs)
@@ -596,12 +615,12 @@ class Unit : IEquatable<Unit>, ICloneable
             case Constants.Southwest:
                 return move(new Cell(-1, 1));
             case Constants.Southeast:
-                return move(new Cell(-1, 0));
+                return move(new Cell(0, 1));
             case Constants.Northwest:
-                return move(new Cell(1, 1));
-            default:
+                return move(new Cell(-1, -1));
             case Constants.Northeast:
-                return move(new Cell(1, 0));
+            default:
+                return move(new Cell(0, -1));
         }
     }
 
@@ -764,11 +783,6 @@ public static class Program
 
     static void Main(string[] args)
     {
-        var bt = new BoardTree(new Board(10, 10));
-        var start = JsonConvert.DeserializeObject<Unit>("{'members':[{'x':1,'y':3},{'x':1,'y':2},{'x':1,'y':1}],'pivot':{'x':1,'y':2}}");
-        var end = JsonConvert.DeserializeObject<Unit>("{'members':[{'x':5,'y':0},{'x':4,'y':1},{'x':5,'y':2}],'pivot':{'x':4,'y':1}}");
-        bt.generatePath(start, end);
-
         var commandLineParams = new CommandLineParams(args);
 
         var input = JsonConvert.DeserializeObject<Input>(
