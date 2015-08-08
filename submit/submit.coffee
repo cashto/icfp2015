@@ -11,7 +11,7 @@ problems = ('problem_' + i for i in [0 .. 23])
 phrasesOfPower = ['Ei!']
 concurrency = os.cpus().length
 
-upload = (ans) ->
+upload = (problemKey, ans) ->
     args = [
         '--user', ':' + apiToken,
         '-X', 'POST',
@@ -21,9 +21,7 @@ upload = (ans) ->
     ]
     
     execFile 'curl', args, null, (error, stdout, stderr) ->
-        console.log "ERROR: " + error if error?
-        console.log stdout if stdout?
-        console.log "STDERR: " + stderr if stderr?
+        console.log "#{problemKey}: #{stdout} (#{error})"
 
 runOne = (problem, cb) ->
     cmd = []
@@ -48,11 +46,11 @@ runOne = (problem, cb) ->
             newHigh = '[NEW HIGH]' if ans.score > bestScore
             newHigh = '[HIGH]' if ans.score is bestScore
             
-            console.log "#{problemKey}: #{bestScore} -> #{ans.score} #{newHigh}"
+            console.log "   #{problemKey}: #{bestScore} -> #{ans.score} #{newHigh}"
             
-            if ans.score > bestScore
+            if ans.score >= bestScore
                 data.best = ans
-                #upload(ans)
+                upload(problemKey, [ans.output])
             
             g.solutions[problemKey] = data
             fs.writeFileSync('../work/g.json', JSON.stringify(g))
@@ -75,3 +73,7 @@ onComplete = ->
 runner = new Runner(problems, onComplete)
 for i in [1 .. concurrency] 
     runner.startOne()
+
+#for key, value of g.solutions
+#    upload([value.best.output])
+#    #console.log JSON.stringify(value.best.output)

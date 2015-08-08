@@ -442,10 +442,43 @@ class BoardTree : IComparable<BoardTree>
                 if (newNode.Piece.Equals(start))
                 {
                     char lockingMove = Constants.ForwardMoves.First(i => willLock(rootNode, i));
-                    return new BoardTree(
+                    var ans = new BoardTree(
                         board.place(end),
-                        reversePath(newNode.getPath()) + lockingMove,
+                        reversePath(newNode.getPath().Reverse()) + lockingMove,
                         this);
+
+                    var checkBoard = board;
+                    var piece = start;
+                    foreach (var ch in ans.path)
+                    {
+                        var nextBoard = checkBoard.place(piece);
+                        //Console.WriteLine(nextBoard);
+                        //Console.WriteLine("----- Making move {0} -----", ch);
+
+                        var nextPiece = piece.go(ch);
+                        var backPiece = nextPiece.go(reversePath(ch.ToString())[0]);
+
+                        if (!piece.Equals(backPiece))
+                        {
+                            throw new Exception();
+                        }
+
+                        if (!checkBoard.contains(nextPiece))
+                        {
+                            checkBoard = nextBoard;
+                        }
+                        else
+                        {
+                            piece = nextPiece;
+                        }
+                    }
+
+                    if (ans.board.ToString() != checkBoard.ToString())
+                    {
+                        throw new Exception();
+                    }
+
+                    return ans;
                 }
 
                 if (board.contains(newNode.Piece) && item.isLegal(newNode))
@@ -470,7 +503,7 @@ class BoardTree : IComparable<BoardTree>
         return !this.board.contains(newNode.Piece);
     }
 
-    private static string reversePath(string s)
+    private static string reversePath(IEnumerable<char> s)
     {
         var sb = new StringBuilder();
 
@@ -694,10 +727,10 @@ class Unit : IEquatable<Unit>, ICloneable
             case Constants.Southeast:
                 return move(new Cell(0, 1));
             case Constants.Northwest:
-                return move(new Cell(-1, -1));
+                return move(new Cell(0, -1));
             case Constants.Northeast:
             default:
-                return move(new Cell(0, -1));
+                return move(new Cell(1, -1));
         }
     }
 
@@ -888,10 +921,10 @@ public static class Program
 
     static void Test()
     {
-        var moves = "aaaaaaalalaaaaaallalaaaalalallalalalallbbllalalaallllallalaalalallallalbbblllalallalbbblaalaalalalaaaapalaalallllbblalbblalalallllblallalllaaalllaaapaalaaappaalllbblalaapallallapppallalbblbblalaabblallll";
+        var moves = "aaaaaaaaapaaaaaaaaaappppapaaddaaapaapaapppppaaakakpaapapppppadlaaaaaadppaaaaaaaaddapppbaaaadaaaapppaaaddaaaaapppplaapaapaapdadapppppaaaakpkaaakpppakalaaaaplapaapaapappppakalaaaappppakaaaaaakakppppplaadaaadaappadaapaadpaappppadaapaapaappppaaaaaaapaaaaaaaaddpaaadaaaaadapppppllkaaapapaaaladadapppaapaapaapaapppplakaaaaakpaaadpdapplakaaaapppppddpaapadpapppppaadppadaaaappaapadpaapaapppplaaaakppaaadaaaadpdppadallaapaaaapkpkpaappppaapaapaapaappppppaaaaaaaappppapaapaapaapppppaaaalaapapaaaaakkpppppalaaaakaappplaaaaadpallaaplladaaapppplaaddapaappppblkaakaakpaapppbapaapkapappppaakkaaaallaaapbdadaaaaappppkaakapaakkpaapppppaapaapaapppplaaaadappkaaaaapaaaaaaddppppaaaappbaallapaaaaaappppdaaapaapdpdpaapppbddpaapaapadpppppaakpaapapppppdadaaadadpppallaapapaapaapaappppakakaaaapakppppppaapaapaappppkaaaaakaaplaaaadlpaaaakapppppaaapaapaapppppkkaaaaappppaaaaaadpaaakkpaapaappppbdaaaaaappppaalaadddppaaaaaapppapaapaapaapppppddpaakkpaapaapppppakaaaalapaaaaaaapppplakaakaaaapkaaapaddapaapppppakaalkkaaaaapaapadpaapppppddladaaadppplakklaaaaaaappppplaaaaapppppdaapaapaapkpkpppplakaaaappppapadaaapaapppppkalaaaaadppppkaaaakppppllalakakppalakklpakapaapaapddpaapppppalaaaadppapaakkpaapaapaapppppakalaaaappppblaalaaappaaaaaapapppppakkaaapaappppp";
 
         var input = JsonConvert.DeserializeObject<Input>(
-            File.ReadAllText("../problems/problem_6.json"));
+            File.ReadAllText("../problems/problem_0.json"));
 
         var source = new List<Unit>();
         var rand = new Random(0);
@@ -938,7 +971,7 @@ public static class Program
 
     static void Main(string[] args)
     {
-        Test();
+        //Test();
 
         var commandLineParams = new CommandLineParams(args);
 
