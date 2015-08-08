@@ -7,8 +7,8 @@ g = JSON.parse(
 
 apiToken = 'rTtrTF3dLjQK/pN16VMLkg6zxstoXlwOUa06jqRVr48='
 teamId = 183
-#problems = ('problem_' + i for i in [0 .. 23])
-problems = ('problem_' + i for i in [12, 14, 2, 3, 5, 6, 7])
+problems = ('problem_' + i for i in [0 .. 23])
+#problems = ('problem_' + i for i in [12, 14, 2, 3, 5, 6, 7])
 
 phrasesOfPower = ['Ei!']
 concurrency = os.cpus().length
@@ -22,9 +22,12 @@ upload = (problemKey, ans) ->
         "https://davar.icfpcontest.org/teams/#{teamId}/solutions"
     ]
     
-    execFile 'curl', args, null, (error, stdout, stderr) ->
-        console.log "   #{problemKey}: #{stdout} (#{error})"
-
+    try
+        execFile 'curl', args, null, (error, stdout, stderr) ->
+            console.log "   #{problemKey}: #{stdout} (#{error})"
+    catch e
+        console.log e
+        
 runOne = (problem, cb) ->
     cmd = []
     cmd.push('-f')
@@ -74,10 +77,17 @@ class Runner
 onComplete = ->
     fs.writeFileSync('../work/g.json', JSON.stringify(g))
 
-runner = new Runner(problems, onComplete)
-for i in [1 .. concurrency] 
-    runner.startOne()
+#runner = new Runner(problems, onComplete)
+#for i in [1 .. concurrency] 
+#    runner.startOne()
 
-#for key, value of g.solutions
-#    upload([value.best.output])
-#    #console.log JSON.stringify(value.best.output)
+for problem in problems
+    ans = []
+    for key,value of g.solutions
+        if key.substr(0, problem.length + 1) == problem + '-'
+            ans.push(value.best.output)
+    #console.log ans
+    #console.log '------'
+    
+    upload("", ans)
+    #console.log JSON.stringify(value.best.output)

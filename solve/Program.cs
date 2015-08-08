@@ -121,12 +121,17 @@ public class Random
 
 class Board
 {
-    public Board(int width, int height)
+    public Board(Input input)
     {
         this.score = 0;
-        this.width = width;
-        this.height = height;
+        this.width = input.width;
+        this.height = input.height;
         this.data = new bool[width * height];
+
+        foreach (var cell in input.filled)
+        {
+            this[cell.x, cell.y] = true;
+        }
     }
 
     private Board(Board other, int score)
@@ -842,6 +847,12 @@ class CommandLineParams
                     argsEnum.MoveNext();
                     cores = int.Parse(argsEnum.Current);
                     break;
+                case "-s":
+                    argsEnum.MoveNext();
+                    seedToShow = UInt32.Parse(argsEnum.Current);
+                    argsEnum.MoveNext();
+                    movesToShow = argsEnum.Current;
+                    break;
             }
         }
     }
@@ -851,6 +862,8 @@ class CommandLineParams
     public int megabyteLimit { get; set; }
     public List<string> phrasesOfPower { get; set; }
     public int cores { get; set; }
+    public UInt32 seedToShow { get; set; }
+    public string movesToShow { get; set; }
 }
 
 
@@ -876,7 +889,7 @@ public static class Program
             source.Add(input.units[(int)(rand.next() % input.units.Count)]);
         }
 
-        var tree = new BoardTree(new Board(input.width, input.height));
+        var tree = new BoardTree(new Board(input));
         var startTime = DateTime.UtcNow;
 
         foreach (var piece_ in source)
@@ -906,9 +919,9 @@ public static class Program
             });
 
         string solution = "";
-        ans.walkFromRoot(i => solution = solution + i.path);
+        ans.walkFromRoot(i => solution = solution + i.path + "/");
 
-        Console.Error.WriteLine(ans.board);
+        Show(input, seed, solution.Replace("/", ""));
 
         return new AnnotatedOutput()
         {
@@ -922,30 +935,33 @@ public static class Program
         };
     }
 
-    static void Test()
+    static void Show(
+        Input input,
+        UInt32 seedToShow,
+        string movesToShow)
     {
-        var moves = "lllaaalllabllaaalaalbdadllllllllpaaaaakkalbaaaaaaaddapaddlllllldllpllllklllllbaakalaaallbaaaakaaapakkalllllpaaaaalplllkllllpkkllllllapalllkaaallballdaallapaaaalaakaldpblllllkllllpbkaalaaalpdaldlllllappllllllkkappaakaaaalpdldlllllallpakaaaalalpaaaalallppaaddalllpbbllllallbdaadllllpllllllkpaaaaadaalppadaadpdaaaapbblllldlllpaallaalllaaallkkallpaaaaaalllpaaaaallllabbddlllllllapaaaaaaallpddaaalldlaplllllldlpblaaaaaakllbpkaaaaaaapaaaaaallpaaaakaaaplllllllllpaalaallbbkllllllbaaaallapkllblllllabblldaaaldllapadallllllpaaalaaaadppkaaaaallabllllllllblalllklaplllllllplllkaaaakaapaaaaaakapaaaallllpkalkklaallppdaaaaaaalppdaallddlpbldlllaalapbkkllalllllpaaaaaalapdllaaallppdaaaaallapkkalllllapblllllllalbbkllllalpdlllllllapaaallldllpaaaaaalalppdaaalldalbaallllllddpblllllaalapbdlldlllllllbaaaaaalalpalllldlllpdaaalaaldalapkkaaalaaapblaaaalallpbkkllalllllplllllldaapaakaaaaappdaallllllablllallapbllkaaaaapallllalllpdaaaalaaapalaaaallkplldldlllplkkllkalllpaaaadaaapblkaaaalllpalklalaallpbllkkaallaalpdllldlllllpaalaaalpkpkaaaaaaapaaddala";
-
-        var input = JsonConvert.DeserializeObject<Input>(
-            File.ReadAllText("../problems/problem_0.json"));
+        Console.WriteLine("Number of units: {0}", input.units.Count);
+        Console.WriteLine("Number of sourceUnits: {0}", input.sourceLength);
+        Console.WriteLine();
 
         var source = new List<Unit>();
-        var rand = new Random(0);
+        var rand = new Random(seedToShow);
         for (var i = 0; i < input.sourceLength; ++i)
         {
             source.Add(input.units[(int)(rand.next() % input.units.Count)]);
         }
 
-        var board = new Board(input.width, input.height);
+        var board = new Board(input);
         Unit piece = null;
         var sourceEnum = source.GetEnumerator();
 
-        foreach (var c in moves)
+        foreach (var c in movesToShow)
         {
             if (piece == null)
             {
                 if (!sourceEnum.MoveNext())
                 {
+                    Console.WriteLine("----- Too many moves -----");
                     break;
                 }
 
@@ -953,8 +969,21 @@ public static class Program
             }
 
             var nextBoard = board.place(piece);
-            Console.WriteLine("----- Making move {0} -----", c);
             Console.WriteLine(nextBoard);
+
+            string friendlyStr = "";
+            switch(c)
+            {
+                case Constants.West: friendlyStr = "W (<=)"; break;
+                case Constants.East: friendlyStr = "E (=>)"; break;
+                case Constants.Northwest: friendlyStr = "NW (^ <=)"; break;
+                case Constants.Northeast: friendlyStr = "NE (^ =>)"; break;
+                case Constants.Southwest: friendlyStr = "SW (v <=)"; break;
+                case Constants.Southeast: friendlyStr = "SE (v =>)"; break;
+                case Constants.Clockwise: friendlyStr = "Rotate"; break;
+                case Constants.CounterClockwise: friendlyStr = "Rotate CCW"; break;
+            }
+            Console.WriteLine("----- Making move {0} -----", friendlyStr);
 
             var nextPiece = piece.go(c);
             if (!board.contains(nextPiece))
@@ -967,19 +996,21 @@ public static class Program
                 piece = nextPiece;
             }
         }
-
-        Environment.Exit(0);
     }
 
 
     static void Main(string[] args)
     {
-        //Test();
-
         var commandLineParams = new CommandLineParams(args);
 
         var input = JsonConvert.DeserializeObject<Input>(
             File.ReadAllText(commandLineParams.inputFilename));
+
+        if (commandLineParams.movesToShow != null)
+        {
+            Show(input, commandLineParams.seedToShow, commandLineParams.movesToShow);
+            return;
+        }
 
         var threads = new List<Thread>();
         var output = new List<AnnotatedOutput>();
