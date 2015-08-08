@@ -340,6 +340,12 @@ class BoardTree : IComparable<BoardTree>
                 {
                     var cell = rotatedPiece.members.First();
                     var movedPiece = rotatedPiece.move(new Cell(x, y) - cell);
+
+                    //var unmovedPiece = movedPiece.move(cell - new Cell(x, y));
+                    //if (!unmovedPiece.Equals(rotatedPiece))
+                    //{
+                    //    throw new Exception();
+                    //}
                     
                     if (board.contains(movedPiece) && !ans.Contains(movedPiece) && board.canLock(movedPiece))
                     {
@@ -348,6 +354,11 @@ class BoardTree : IComparable<BoardTree>
 
                     rotatedPiece = rotatedPiece.rotate();
                 }
+
+                //if (!rotatedPiece.Equals(piece))
+                //{
+                //    throw new Exception();
+                //}
             }
 
             if (ans.Count > Constants.GenerateGoalsMinExamined)
@@ -363,21 +374,22 @@ class BoardTree : IComparable<BoardTree>
     {
         var pq = new PriorityQueue<GeneratePathNode>((i, j) => i.score(start) > j.score(start));
         var rootNode = new GeneratePathNode(end);
+        var set = new HashSet<string>();
         pq.push(rootNode);
 
         int z = 0;
 
-        Console.WriteLine("{0} -> {1}", end, start);
+        //Console.WriteLine("{0} -> {1}", end, start);
 
         while (!pq.isEmpty())
         {
             var item = pq.pop();
 
-            Console.WriteLine("{0}, score={1}", item, item.score(start));
+            //Console.WriteLine("{0}, score={1}", item, item.score(start));
 
-            if (++z % 100 == 0)
+            if (++z % 500 == 0)
             {
-                Console.WriteLine("BREAK");
+                //Console.WriteLine("BREAK");
             }
 
             foreach (var c in Constants.ReverseMoves)
@@ -394,8 +406,13 @@ class BoardTree : IComparable<BoardTree>
 
                 if (board.contains(newNode.Piece) && item.isLegal(newNode))
                 {
-                    //Console.WriteLine("adding {0}, score={1}", newNode, newNode.score(start));
-                    pq.push(newNode);
+                    var key = newNode.Piece.ToString();
+                    if (!set.Contains(key))
+                    {
+                        //Console.WriteLine("adding {0}, score={1}", newNode, newNode.score(start));
+                        set.Add(key);
+                        pq.push(newNode);
+                    }
                 }
             }
         }
@@ -488,6 +505,12 @@ class BoardTree : IComparable<BoardTree>
                 return 2;
             }
 
+            //var flipped = rotateCw.rotate().rotate();
+            //if (!flipped.Equals(Piece))
+            //{
+            //    throw new Exception();
+            //}
+
             return 3;
         }
 
@@ -522,7 +545,7 @@ class BoardTree : IComparable<BoardTree>
 }
 
 
-class Cell : IEquatable<Cell>
+class Cell : IEquatable<Cell>, IComparable<Cell>
 {
     public Cell() { }
     public Cell(int x, int y) { this.x = x; this.y = y; }
@@ -530,13 +553,16 @@ class Cell : IEquatable<Cell>
     public int x { get; set; }
     public int y { get; set; }
 
-    public Cell rotate(bool clockwise = true)
+    public Cell rotate(Cell pivot, bool clockwise = true)
     {
         int dir = clockwise ? 1 : -1;
         Func<int, int> odd = (a) => a & 1;
-        int y2 = (dir * 4 * x + dir * 2 * odd(y) + 2 * y) / 4;
-        int x2 = (2 * x + odd(y) - dir * y * 3 - odd(y2) * 2) / 4;
-        return new Cell(x2, y2);
+        var cell = Cell.zero + (this - pivot);
+        int x = cell.x;
+        int y = cell.y;
+        int y2 = (dir * 4 * x + dir * 2 * odd(y) + 2 * y) >> 2;
+        int x2 = (2 * x + odd(y) - dir * y * 3 - odd(y2) * 2) >> 2;
+        return pivot + (new Cell(x2, y2) - Cell.zero);
     }
 
     public int distance(Cell other)
@@ -559,7 +585,7 @@ class Cell : IEquatable<Cell>
     public static Cell operator-(Cell lhs, Cell rhs)
     {
         return new Cell(
-            (lhs.x - lhs.y / 2) - (rhs.x - rhs.y / 2), 
+            (lhs.x - (lhs.y >> 1)) - (rhs.x - (rhs.y >> 1)), 
             lhs.y - rhs.y);
     }
 
@@ -567,7 +593,7 @@ class Cell : IEquatable<Cell>
     {
         var y = lhs.y + rhs.y;
         return new Cell(
-            lhs.x + rhs.x + y / 2 - lhs.y / 2,
+            lhs.x + rhs.x + (y >> 1) - (lhs.y >> 1),
             y);
     }
 
@@ -576,12 +602,19 @@ class Cell : IEquatable<Cell>
         return this.x == other.x && this.y == other.y;
     }
 
+    public int CompareTo(Cell other)
+    {
+        return this.y == other.y ?
+            this.x - other.x :
+            this.y - other.y;
+    }
+
     public override string ToString()
     {
         return string.Format("{0},{1}", x, y);
     }
 
-    public static Cell zero = new Cell(0, 0);
+    public static readonly Cell zero = new Cell(0, 0);
 }
 
 
@@ -637,7 +670,7 @@ class Unit : IEquatable<Unit>, ICloneable
     {
         return new Unit()
         {
-            members = this.members.Select(i => (i - this.pivot).rotate(clockwise) + this.pivot).ToList(),
+            members = this.members.Select(i => i.rotate(pivot, clockwise)).ToList(),
             pivot = pivot
         };
     }
@@ -647,12 +680,14 @@ class Unit : IEquatable<Unit>, ICloneable
         int y_min = members.Min(i => i.y);
         int x_min = members.Min(i => i.x);
         int x_max = members.Max(i => i.x);
-        return move(new Cell((width - x_max + x_min) / 2, -y_min));
+        return move(new Cell((width - x_max + x_min) >> 1, -y_min));
     }
 
     public override string ToString()
     {
-        return string.Join(",", members.Select(i => string.Format("[{0},{1}]", i.x, i.y)));
+        members.Sort();
+        return string.Join(",", members.Select(i => string.Format("[{0},{1}]", i.x, i.y))) + 
+            ":[" + pivot.x + "," + pivot.y + "]";
     }
 }
 
@@ -767,7 +802,9 @@ public static class Program
         // TODO: get deepest result.
         BoardTree ans = tree.getBestLeafNodes().First();
         string solution = "";
-        ans.walkFromRoot(i => solution = solution + i.path);
+        ans.walkFromRoot(i => solution = solution + i.path + ' ');
+
+        Console.WriteLine(ans.board);
 
         return new AnnotatedOutput()
         {
@@ -792,6 +829,6 @@ public static class Program
             .Select(seed => solve(input, seed))
             .ToList();
 
-        Console.WriteLine(JsonConvert.SerializeObject(output));
+        Console.WriteLine(JsonConvert.SerializeObject(output, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }));
     }
 }
