@@ -9,9 +9,20 @@ using System.Threading.Tasks;
 
 static class Constants
 {
-    public static int GenerateGoalsMinExamined = 100;
-    public static int GenerateGoalsMaxReturned = 20;
-    public static int PruneTreeLimit = 20;
+    public const int GenerateGoalsMinExamined = 100;
+    public const int GenerateGoalsMaxReturned = 20;
+    public const int PruneTreeLimit = 20;
+
+    public const char West = 'p';
+    public const char East = 'b';
+    public const char Southwest = 'a';
+    public const char Southeast = 'l';
+    public const char Northwest = '6';
+    public const char Northeast = '7';
+    public const char Clockwise = 'd';
+    public const char CounterClockwise = 'k';
+    public const string ForwardMoves = "pbaldk";
+    public const string ReverseMoves = "pb67dk";
 }
 
 
@@ -25,6 +36,11 @@ class PriorityQueue<T>
 
     public bool isEmpty()
     {
+        if (items.Count > 100000)
+        {
+            return false;
+        }
+
         return !this.items.Any();
     }
 
@@ -117,9 +133,9 @@ class Board
         this.data = new bool[width * height];
     }
 
-    private Board(Board other)
+    private Board(Board other, int score)
     {
-        this.score = 0; 
+        this.score = score;
         this.width = other.width;
         this.height = other.height;
         this.data = other.data.ToArray();
@@ -147,18 +163,12 @@ class Board
 
     public bool canLock(Unit piece)
     {
-        return 
-            !this.contains(piece.move(Cell.east)) ||
-            !this.contains(piece.move(Cell.west)) ||
-            !this.contains(piece.move(Cell.southeast)) ||
-            !this.contains(piece.move(Cell.southwest)) ||
-            !this.contains(piece.rotate(false)) ||
-            !this.contains(piece.rotate(true));
+        return Constants.ForwardMoves.Any(c => !this.contains(piece.go(c)));
     }
 
     public Board place(Unit piece)
     {
-        Board ans = new Board(this);
+        Board ans = new Board(this, this.score + piece.members.Count);
 
         // TODO drop lines
         // TODO calculate score
@@ -176,6 +186,31 @@ class Board
         {
             return this.data[x + y * width];
         }
+    }
+
+    public override string ToString()
+    {
+        var sb = new StringBuilder();
+
+        sb.Append('\n');
+
+        for (var y = 0; y < height; ++y)
+        {
+            if ((y & 1) != 0)
+            {
+                sb.Append(' ');
+            }
+
+            for (var x = 0; x < width; ++x)
+            {
+                sb.Append(this[x, y] ? '#' : '.');
+                sb.Append(' ');
+            }
+
+            sb.Append('\n');
+        }
+
+        return sb.ToString();
     }
 
     private bool[] data;
@@ -200,7 +235,7 @@ class BoardTree : IComparable<BoardTree>
             {
                 if (!board[x, y])
                 {
-                    heuristicScore += y;
+                    heuristicScore += board.height - y;
                 }
             }
         }
@@ -208,7 +243,7 @@ class BoardTree : IComparable<BoardTree>
 
     public int CompareTo(BoardTree other)
     {
-        return this.heuristicScore - other.heuristicScore;
+        return other.heuristicScore - this.heuristicScore;
     }
 
     public override string ToString()
@@ -221,6 +256,11 @@ class BoardTree : IComparable<BoardTree>
     public bool expand(Unit unit)
     {
         if (children != null)
+        {
+            return false;
+        }
+
+        if (!board.contains(unit))
         {
             return false;
         }
@@ -303,13 +343,12 @@ class BoardTree : IComparable<BoardTree>
                 var rotatedPiece = piece;
                 for (var i = 0; i < 6; ++i)
                 {
-                    foreach (var cell in rotatedPiece.members)
+                    var cell = rotatedPiece.members.First();
+                    var movedPiece = rotatedPiece.move(new Cell(x, y) - cell);
+                    
+                    if (board.contains(movedPiece) && !ans.Contains(movedPiece) && board.canLock(movedPiece))
                     {
-                        var movedPiece = rotatedPiece.move(new Cell(x - cell.x, y - cell.y));
-                        if (board.contains(movedPiece) && !ans.Contains(movedPiece) && board.canLock(movedPiece))
-                        {
-                            ans.Add(movedPiece);
-                        }
+                        ans.Add(movedPiece);
                     }
 
                     rotatedPiece = rotatedPiece.rotate();
@@ -325,24 +364,25 @@ class BoardTree : IComparable<BoardTree>
         return ans.shuffle(new Random((UInt32)DateTime.UtcNow.Ticks)).Take(Constants.GenerateGoalsMaxReturned);
     }
 
-    private BoardTree generatePath(Unit start, Unit end)
+    public BoardTree generatePath(Unit start, Unit end)
     {
         var pq = new PriorityQueue<GeneratePathNode>((i, j) => i.score(start) > j.score(start));
-        pq.push(new GeneratePathNode(end));
+        var rootNode = new GeneratePathNode(end);
+        pq.push(rootNode);
 
         while (!pq.isEmpty())
         {
             var item = pq.pop();
 
-            foreach (var c in allReverseDirections)
+            foreach (var c in Constants.ReverseMoves)
             {
                 var newNode = new GeneratePathNode(item, c);
                 if (newNode.Piece.Equals(start))
                 {
-                    // TODO: lock the piece
+                    char lockingMove = Constants.ForwardMoves.First(i => willLock(rootNode, i));
                     return new BoardTree(
-                        board.place(newNode.Piece),
-                        reversePath(newNode.getPath()),
+                        board.place(end),
+                        reversePath(newNode.getPath()) + lockingMove,
                         this);
                 }
 
@@ -354,6 +394,12 @@ class BoardTree : IComparable<BoardTree>
         }
 
         return null;
+    }
+
+    private bool willLock(GeneratePathNode node, char c)
+    {
+        var newNode = new GeneratePathNode(node, c);
+        return !this.board.contains(newNode.Piece);
     }
 
     private static string reversePath(string s)
@@ -428,8 +474,8 @@ class BoardTree : IComparable<BoardTree>
 
         public int score(Unit other)
         {
-            Cell pivotDistance = other.pivot - Piece.pivot;
-            return Math.Abs(pivotDistance.x) + Math.Abs(pivotDistance.y) + rotateDistance(other) + Length;
+            Cell pivotDistance = Piece.pivot - other.pivot;
+            return Math.Abs(pivotDistance.x) + Math.Abs(pivotDistance.y) + rotateDistance(other.move(pivotDistance)) + Length;
         }
 
         private int rotateDistance(Unit other)
@@ -478,6 +524,11 @@ class BoardTree : IComparable<BoardTree>
 
             return Parent.getPath() + this.Move;
         }
+
+        public override string ToString()
+        {
+            return string.Format("piece={0}, path={1}", this.Piece, this.getPath());
+        }
     }
 
     public Board board;
@@ -487,8 +538,6 @@ class BoardTree : IComparable<BoardTree>
     private List<BoardTree> children;
     private bool mark;
     private int heuristicScore;
-
-    private static string allReverseDirections = "pb67dk";
 }
 
 
@@ -509,14 +558,24 @@ class Cell : IEquatable<Cell>
         return new Cell(x2, y2);
     }
 
+    public static int distance(Cell other)
+    {
+        throw new NotImplementedException();
+    }
+
     public static Cell operator-(Cell lhs, Cell rhs)
     {
-        return new Cell(lhs.x - rhs.x, lhs.y - rhs.y);
+        return new Cell(
+            (lhs.x - lhs.y / 2) - (rhs.x - rhs.y / 2), 
+            lhs.y - rhs.y);
     }
 
     public static Cell operator +(Cell lhs, Cell rhs)
     {
-        return new Cell(lhs.x + rhs.x, lhs.y + rhs.y);
+        var y = lhs.y + rhs.y;
+        return new Cell(
+            lhs.x + lhs.y / 2 - y / 2,
+            y);
     }
 
     public bool Equals(Cell other)
@@ -547,6 +606,30 @@ class Unit : IEquatable<Unit>, ICloneable
     public bool Equals(Unit other)
     {
         return this.pivot.Equals(other.pivot) && this.members.All(i => other.members.Contains(i));
+    }
+
+    public Unit go(char direction)
+    {
+        switch (direction)
+        {
+            case Constants.Clockwise:
+                return rotate(true);
+            case Constants.CounterClockwise:
+                return rotate(false);
+            case Constants.West:
+                return move(new Cell(-1, 0));
+            case Constants.East:
+                return move(new Cell(1, 0));
+            case Constants.Southwest:
+                return move(new Cell(-1, 1));
+            case Constants.Southeast:
+                return move(new Cell(-1, 0));
+            case Constants.Northwest:
+                return move(new Cell(1, 1));
+            default:
+            case Constants.Northeast:
+                return move(new Cell(1, 0));
+        }
     }
 
     public Unit move(Cell direction)
@@ -639,6 +722,10 @@ class CommandLineParams
                     argsEnum.MoveNext();
                     phrasesOfPower.Add(argsEnum.Current);
                     break;
+                case "-c":
+                    argsEnum.MoveNext();
+                    cores = int.Parse(argsEnum.Current);
+                    break;
             }
         }
     }
@@ -647,25 +734,12 @@ class CommandLineParams
     public TimeSpan timeLimit { get; set; }
     public int megabyteLimit { get; set; }
     public List<string> phrasesOfPower { get; set; }
+    public int cores { get; set; }
 }
 
 
 public static class Program
 {
-    static void Main(string[] args)
-    {
-        var commandLineParams = new CommandLineParams(args);
-        
-        var input = JsonConvert.DeserializeObject<Input>(
-            File.ReadAllText(commandLineParams.inputFilename));
-
-        var output = input.sourceSeeds
-            .Select(seed => solve(input, seed))
-            .ToList();
-            
-        Console.WriteLine(JsonConvert.SerializeObject(output));
-    }
-
     public static IEnumerable<T> shuffle<T>(this IEnumerable<T> input_, Random rand)
     {
         var input = input_.ToList();
@@ -713,5 +787,24 @@ public static class Program
                 seed = seed
             }
         };
+    }
+
+    static void Main(string[] args)
+    {
+        var bt = new BoardTree(new Board(10, 10));
+        var start = JsonConvert.DeserializeObject<Unit>("{'members':[{'x':1,'y':3},{'x':1,'y':2},{'x':1,'y':1}],'pivot':{'x':1,'y':2}}");
+        var end = JsonConvert.DeserializeObject<Unit>("{'members':[{'x':5,'y':0},{'x':4,'y':1},{'x':5,'y':2}],'pivot':{'x':4,'y':1}}");
+        bt.generatePath(start, end);
+
+        var commandLineParams = new CommandLineParams(args);
+
+        var input = JsonConvert.DeserializeObject<Input>(
+            File.ReadAllText(commandLineParams.inputFilename));
+
+        var output = input.sourceSeeds
+            .Select(seed => solve(input, seed))
+            .ToList();
+
+        Console.WriteLine(JsonConvert.SerializeObject(output));
     }
 }
