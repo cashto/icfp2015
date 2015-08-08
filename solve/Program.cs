@@ -724,7 +724,17 @@ class Unit : IEquatable<Unit>, ICloneable
         int y_min = members.Min(i => i.y);
         int x_min = members.Min(i => i.x);
         int x_max = members.Max(i => i.x);
-        return move(new Cell((width - x_max + x_min) >> 1, -y_min));
+        int dx = (width - x_max + x_min - 1) >> 1;
+        int dy = -y_min;
+
+        Func<Cell, Cell> adjust = (cell) =>
+            new Cell(cell.x + dx, cell.y + dy);
+        
+        return new Unit()
+        {
+            members = members.Select(adjust).ToList(),
+            pivot = adjust(pivot)
+        };
     }
 
     public override string ToString()
@@ -876,8 +886,60 @@ public static class Program
         };
     }
 
+    static void Test()
+    {
+        var moves = "aaaaaaalalaaaaaallalaaaalalallalalalallbbllalalaallllallalaalalallallalbbblllalallalbbblaalaalalalaaaapalaalallllbblalbblalalallllblallalllaaalllaaapaalaaappaalllbblalaapallallapppallalbblbblalaabblallll";
+
+        var input = JsonConvert.DeserializeObject<Input>(
+            File.ReadAllText("../problems/problem_6.json"));
+
+        var source = new List<Unit>();
+        var rand = new Random(0);
+        for (var i = 0; i < input.sourceLength; ++i)
+        {
+            source.Add(input.units[(int)(rand.next() % input.units.Count)]);
+        }
+
+        var board = new Board(input.width, input.height);
+        Unit piece = null;
+        var sourceEnum = source.GetEnumerator();
+
+        foreach (var c in moves)
+        {
+            if (piece == null)
+            {
+                if (!sourceEnum.MoveNext())
+                {
+                    break;
+                }
+
+                piece = sourceEnum.Current.center(board.width);
+            }
+
+            var nextBoard = board.place(piece);
+            Console.WriteLine("----- Making move {0} -----", c);
+            Console.WriteLine(nextBoard);
+
+            var nextPiece = piece.go(c);
+            if (!board.contains(nextPiece))
+            {
+                board = nextBoard;
+                piece = null;
+            }
+            else
+            {
+                piece = nextPiece;
+            }
+        }
+
+        Environment.Exit(0);
+    }
+
+
     static void Main(string[] args)
     {
+        Test();
+
         var commandLineParams = new CommandLineParams(args);
 
         var input = JsonConvert.DeserializeObject<Input>(
