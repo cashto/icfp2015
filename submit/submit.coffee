@@ -1,3 +1,4 @@
+os = require('os')
 fs = require('fs')
 execFile = require('child_process').execFile
 
@@ -8,7 +9,21 @@ apiToken = 'rTtrTF3dLjQK/pN16VMLkg6zxstoXlwOUa06jqRVr48='
 teamId = 183
 problems = ('problem_' + i for i in [0 .. 23])
 phrasesOfPower = ['Ei!']
-concurrency = 8
+concurrency = os.cpus().length
+
+upload = (ans) ->
+    args = [
+        '--user', ':' + apiToken,
+        '-X', 'POST',
+        '-H', 'Content-Type: application/json',
+        '-d', JSON.stringify(ans),
+        "https://davar.icfpcontest.org/teams/#{teamId}/solutions"
+    ]
+    
+    execFile 'curl', args, null, (error, stdout, stderr) ->
+        console.log "ERROR: " + error if error?
+        console.log stdout if stdout?
+        console.log "STDERR: " + stderr if stderr?
 
 runOne = (problem, cb) ->
     cmd = []
@@ -18,7 +33,7 @@ runOne = (problem, cb) ->
         cmd.push('-p')
         cmd.push(phrase)
 
-    execFile '../solve/bin/Release/solve.exe', cmd, null, (error, stdout, stderr) ->
+    execFile './solve.exe', cmd, null, (error, stdout, stderr) ->
         throw error if error?
         
         answers = JSON.parse(stdout)
@@ -29,14 +44,19 @@ runOne = (problem, cb) ->
             data.history.push(ans)
             
             bestScore = (if data.best? then data.best.score else 0)
-            newHigh = (if ans.score > bestScore then '[NEW HIGH]' else if ans.score is bestScore '[HIGH]' else '')
+            newHigh = '' 
+            newHigh = '[NEW HIGH]' if ans.score > bestScore
+            newHigh = '[HIGH]' if ans.score is bestScore
+            
             console.log "#{problemKey}: #{bestScore} -> #{ans.score} #{newHigh}"
+            
             if ans.score > bestScore
                 data.best = ans
-                #TODO: submit solution
+                #upload(ans)
             
             g.solutions[problemKey] = data
-        
+            fs.writeFileSync('../work/g.json', JSON.stringify(g))
+            
         cb()
 
 class Runner
@@ -50,7 +70,7 @@ class Runner
             runOne(@problems[@index++], => @startOne())
 
 onComplete = ->
-    #fs.writeFileSync('../work/g.json', JSON.stringify(g))
+    fs.writeFileSync('../work/g.json', JSON.stringify(g))
 
 runner = new Runner(problems, onComplete)
 for i in [1 .. concurrency] 

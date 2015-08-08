@@ -824,7 +824,12 @@ public static class Program
 
     static AnnotatedOutput solve(Input input, UInt32 seed)
     {
-        var source = input.units.shuffle(new Random(seed));
+        var source = new List<Unit>();
+        var rand = new Random(seed);
+        for (var i = 0; i < input.sourceLength; ++i)
+        {
+            source.Add(input.units[(int)(rand.next() % input.units.Count)]);
+        }
 
         var tree = new BoardTree(new Board(input.width, input.height));
 
