@@ -165,12 +165,22 @@ class Board
     {
         Board ans = new Board(this, this.score + piece.members.Count);
 
-        // TODO drop lines
-        // TODO calculate score
         foreach (var cell in piece.members)
         {
             ans.data[cell.x + cell.y * width] = true;
         }
+
+        var linesRemoved = 0;
+        for (var y = this.height - 1; y >= 0; --y)
+        {
+            if (ans.lineFull(y))
+            {
+                ans.removeLine(y);
+                ++linesRemoved;
+            }
+        }
+
+        ans.score += 100 * (1 + linesRemoved) * linesRemoved / 2;
 
         return ans;
     }
@@ -180,6 +190,11 @@ class Board
         get
         {
             return this.data[x + y * width];
+        }
+
+        set
+        {
+            this.data[x + y * width] = value;
         }
     }
 
@@ -206,6 +221,30 @@ class Board
         }
 
         return sb.ToString();
+    }
+
+    private bool lineFull(int y)
+    {
+        for (var x = 0; x < this.width; ++x)
+        {
+            if (!this[x, y])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void removeLine(int i)
+    {
+        for (var y = i; y >= 0; --y)
+        {
+            for (var x = 0; x < this.width; ++x)
+            {
+                this[x, y] = (y == 0 ? false : this[x, y - 1]);
+            }
+        }
     }
 
     private bool[] data;
@@ -372,6 +411,11 @@ class BoardTree : IComparable<BoardTree>
 
     public BoardTree generatePath(Unit start, Unit end)
     {
+        //if (!board.canLock(end))
+        //{
+        //    throw new Exception();
+        //}
+
         var pq = new PriorityQueue<GeneratePathNode>((i, j) => i.score(start) > j.score(start));
         var rootNode = new GeneratePathNode(end);
         var set = new HashSet<string>();
@@ -786,7 +830,7 @@ public static class Program
 
         foreach (var piece_ in source)
         {
-            Console.WriteLine("solving {0}", tree);
+            Console.Error.WriteLine("solving {0}", tree);
             var piece = piece_.center(input.width);
 
             bool finished = true;
@@ -799,12 +843,21 @@ public static class Program
             }
         }
 
-        // TODO: get deepest result.
-        BoardTree ans = tree.getBestLeafNodes().First();
-        string solution = "";
-        ans.walkFromRoot(i => solution = solution + i.path + ' ');
+        var bestScore = int.MinValue;
+        BoardTree ans = null;
+        tree.walk(i =>
+            {
+                if (i.board.score > bestScore)
+                {
+                    bestScore = i.board.score;
+                    ans = i;
+                }
+            });
 
-        Console.WriteLine(ans.board);
+        string solution = "";
+        ans.walkFromRoot(i => solution = solution + i.path);
+
+        Console.Error.WriteLine(ans.board);
 
         return new AnnotatedOutput()
         {
