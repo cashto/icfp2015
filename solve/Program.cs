@@ -401,10 +401,11 @@ class BoardTree
             return false;
         }
 
-        //Console.WriteLine("Expanding {0}", this);
+        Console.Error.WriteLine("Expanding {0}", this);
+        var inaccessibleSet = new HashSet<Unit>();
 
         this.children = generateGoals(unit)
-            .Select(goal => generatePath(unit, goal))
+            .Select(goal => generatePath(unit, goal, inaccessibleSet))
             .Where(child => child != null)
             .Take(Constants.GenerateGoalsMaxReturned)
             .ToList();
@@ -476,11 +477,12 @@ class BoardTree
         return ans.OrderBy(i => i.Item1).Select(i => i.Item2);
     }
 
-    public BoardTree generatePath(Unit start, Unit end)
+    public BoardTree generatePath(Unit start, Unit end, HashSet<Unit> inaccessibleSet)
     {
         var pq = new PriorityQueue<GeneratePathNode>((i, j) => i.score(start) > j.score(start));
         var set = new HashSet<Unit>();
 
+        var myInaccessibleSet = new HashSet<Unit>();
         var rootNode = new GeneratePathNode(end);
         pq.push(rootNode);
 
@@ -489,6 +491,12 @@ class BoardTree
         while (!pq.isEmpty())
         {
             var item = pq.pop();
+            myInaccessibleSet.Add(item.Piece);
+            if (inaccessibleSet.Contains(item.Piece))
+            {
+                break;
+            }
+            
             var illegalSet = new HashSet<Unit>();
             item.getIllegalSet(illegalSet);
 
@@ -519,6 +527,7 @@ class BoardTree
             }
         }
 
+        inaccessibleSet.UnionWith(myInaccessibleSet); 
         return null;
     }
 
