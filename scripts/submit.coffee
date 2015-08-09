@@ -7,16 +7,16 @@ g = JSON.parse(
 
 apiToken = 'rTtrTF3dLjQK/pN16VMLkg6zxstoXlwOUa06jqRVr48='
 teamId = 183
-problemFiles = ('problem_' + i for i in [0 .. 23])
+problemSet = [24]
+problemFiles = ('problem_' + i for i in problemSet)
+timeLimitSeconds = 600
+phrasesOfPower = [
+    'Ei!'
+    'Ia! Ia!'
+    'R\'lyeh'
+    'Yuggoth'
+]
 
-problems = []
-for file in problemFiles
-    input = JSON.parse(
-        fs.readFileSync("../problems/#{file}.json"), { encoding: 'utf8' })
-    for seed in input.sourceSeeds
-        problems.push { file: file, seed: seed }
-
-phrasesOfPower = ['Ei!']
 concurrency = os.cpus().length
 
 upload = (problemKey, ans) ->
@@ -41,7 +41,7 @@ runOne = (problem, cb) ->
     cmd.push('-r')
     cmd.push problem.seed
     cmd.push('-t')
-    cmd.push('60')
+    cmd.push(timeLimitSeconds)
     for phrase in phrasesOfPower
         cmd.push('-p')
         cmd.push(phrase)
@@ -56,14 +56,14 @@ runOne = (problem, cb) ->
             data = g.solutions[problemKey] or { history: [] }
             data.history.push(ans)
             
-            bestScore = (if data.best? then data.best.score else 0)
+            bestScore = (if data.best? then data.best.score else -1)
             newHigh = '' 
             newHigh = '[NEW HIGH]' if ans.score > bestScore
             newHigh = '[HIGH]' if ans.score is bestScore
             
             console.log "#{problemKey}: #{bestScore} -> #{ans.score} #{newHigh}"
             
-            if ans.score >= bestScore
+            if ans.score > bestScore
                 data.best = ans
                 upload(problemKey, [ans.output])
             
@@ -84,6 +84,19 @@ class Runner
 
 onComplete = ->
     fs.writeFileSync('../work/g.json', JSON.stringify(g))
+
+#
+# Main submitter starts here.
+#    
+problems = []
+for file in problemFiles
+    input = JSON.parse(
+        fs.readFileSync("../problems/#{file}.json"), { encoding: 'utf8' })
+    for seed in input.sourceSeeds
+        problems.push { file: file, seed: seed }
+        
+eta = problems.length * timeLimitSeconds / concurrency / 60
+console.log "#{problems.length} problems, #{timeLimitSeconds} seconds per problem, #{concurrency} at a time: eta #{eta.toFixed(1)} minutes"
 
 runner = new Runner(problems, onComplete)
 for i in [1 .. concurrency] 

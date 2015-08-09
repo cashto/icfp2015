@@ -383,14 +383,8 @@ class BoardTree : IComparable<BoardTree>
                 for (var i = 0; i < 6; ++i)
                 {
                     var cell = rotatedPiece.members.First();
-                    var movedPiece = rotatedPiece.move(new Cell(x, y) - cell);
-
-                    //var unmovedPiece = movedPiece.move(cell - new Cell(x, y));
-                    //if (!unmovedPiece.Equals(rotatedPiece))
-                    //{
-                    //    throw new Exception();
-                    //}
                     
+                    var movedPiece = rotatedPiece.move(new Cell(x, y) - cell);
                     if (board.contains(movedPiece) && !ans.Contains(movedPiece) && board.canLock(movedPiece))
                     {
                         ans.Add(movedPiece);
@@ -398,11 +392,6 @@ class BoardTree : IComparable<BoardTree>
 
                     rotatedPiece = rotatedPiece.rotate();
                 }
-
-                //if (!rotatedPiece.Equals(piece))
-                //{
-                //    throw new Exception();
-                //}
             }
 
             if (ans.Count > Constants.GenerateGoalsMinExamined)
@@ -416,14 +405,9 @@ class BoardTree : IComparable<BoardTree>
 
     public BoardTree generatePath(Unit start, Unit end)
     {
-        //if (!board.canLock(end))
-        //{
-        //    throw new Exception();
-        //}
-
         var pq = new PriorityQueue<GeneratePathNode>((i, j) => i.score(start) > j.score(start));
         var rootNode = new GeneratePathNode(end);
-        var set = new HashSet<string>();
+        var set = new HashSet<Unit>();
         pq.push(rootNode);
 
         int z = 0;
@@ -448,52 +432,17 @@ class BoardTree : IComparable<BoardTree>
                 {
                     //Console.WriteLine(z);
                     char lockingMove = Constants.ForwardMoves.First(i => willLock(rootNode, i));
-                    var ans = new BoardTree(
+                    return new BoardTree(
                         board.place(end),
                         reversePath(newNode.getPath().Reverse()) + lockingMove,
                         this);
-
-                    //var checkBoard = board;
-                    //var piece = start;
-                    //foreach (var ch in ans.path)
-                    //{
-                    //    var nextBoard = checkBoard.place(piece);
-                    //    //Console.WriteLine(nextBoard);
-                    //    //Console.WriteLine("----- Making move {0} -----", ch);
-
-                    //    var nextPiece = piece.go(ch);
-                    //    var backPiece = nextPiece.go(reversePath(ch.ToString())[0]);
-
-                    //    if (!piece.Equals(backPiece))
-                    //    {
-                    //        throw new Exception();
-                    //    }
-
-                    //    if (!checkBoard.contains(nextPiece))
-                    //    {
-                    //        checkBoard = nextBoard;
-                    //    }
-                    //    else
-                    //    {
-                    //        piece = nextPiece;
-                    //    }
-                    //}
-
-                    //if (ans.board.ToString() != checkBoard.ToString())
-                    //{
-                    //    throw new Exception();
-                    //}
-
-                    return ans;
                 }
 
                 if (board.contains(newNode.Piece) && item.isLegal(newNode))
                 {
-                    var key = newNode.Piece.ToString();
-                    if (!set.Contains(key))
+                    if (!set.Contains(newNode.Piece))
                     {
-                        //Console.WriteLine("adding {0}, score={1}", newNode, newNode.score(start));
-                        set.Add(key);
+                        set.Add(newNode.Piece);
                         pq.push(newNode);
                     }
                 }
@@ -556,45 +505,13 @@ class BoardTree : IComparable<BoardTree>
         {
             var p1 = Piece.pivot;
             var p2 = other.pivot;
-            return p1.distance(p2) + rotateDistance(other.move(p1 - p2)) + Length;
+            return p1.distance(p2) + rotateDistance(other) + Length;
         }
 
         private int rotateDistance(Unit other)
         {
-            if (other.Equals(Piece))
-            {
-                return 0;
-            }
-
-            var rotateCw = other.rotate(true);
-            if (rotateCw.Equals(Piece))
-            {
-                return 1;
-            }
-
-            var rotateCcw = other.rotate(false);
-            if (rotateCcw.Equals(Piece))
-            {
-                return 1;
-            }
-
-            if (rotateCw.rotate(true).Equals(Piece))
-            {
-                return 2;
-            }
-
-            if (rotateCcw.rotate(false).Equals(Piece))
-            {
-                return 2;
-            }
-
-            //var flipped = rotateCw.rotate().rotate();
-            //if (!flipped.Equals(Piece))
-            //{
-            //    throw new Exception();
-            //}
-
-            return 3;
+            var distance = (Piece.orientation + 6 - other.orientation) % Piece.symmetry;
+            return distance <= Piece.symmetry / 2 ? distance : Piece.symmetry - distance;
         }
 
         public bool isLegal(GeneratePathNode node)
@@ -705,6 +622,38 @@ class Unit : IEquatable<Unit>, ICloneable
 {
     public List<Cell> members { get; set; }
     public Cell pivot { get; set; }
+    public int orientation { get; private set; }
+
+    public int symmetry
+    {
+        get
+        {
+            if (this.internalSymmetry < 0)
+            {
+                this.internalSymmetry = 6;
+                Unit rotatedPiece = this;
+
+                for (var i = 1; i < 4; ++i)
+                {
+                    rotatedPiece = rotatedPiece.rotate();
+                    if (rotatedPiece.Equals(this))
+                    {
+                        this.internalSymmetry = i;
+                        break;
+                    }
+                }
+            }
+
+            return this.internalSymmetry;
+        }
+
+        private set
+        {
+            internalSymmetry = value;
+        }
+    }
+
+    private int internalSymmetry = -1;
 
     public object Clone()
     {
@@ -745,7 +694,9 @@ class Unit : IEquatable<Unit>, ICloneable
         return new Unit()
         {
             members = this.members.Select(i => i + direction).ToList(),
-            pivot = this.pivot + direction
+            pivot = this.pivot + direction,
+            orientation = this.orientation,
+            symmetry = this.symmetry
         };
     }
 
@@ -754,7 +705,9 @@ class Unit : IEquatable<Unit>, ICloneable
         return new Unit()
         {
             members = this.members.Select(i => i.rotate(pivot, clockwise)).ToList(),
-            pivot = pivot
+            pivot = pivot,
+            orientation = (orientation + (clockwise ? 1 : 5)) % 6,
+            symmetry = this.symmetry
         };
     }
 
@@ -772,15 +725,31 @@ class Unit : IEquatable<Unit>, ICloneable
         return new Unit()
         {
             members = members.Select(adjust).ToList(),
-            pivot = adjust(pivot)
+            pivot = adjust(pivot),
+            orientation = this.orientation,
+            symmetry = this.symmetry
         };
     }
 
     public override string ToString()
     {
         members.Sort();
-        return string.Join(",", members.Select(i => string.Format("[{0},{1}]", i.x, i.y))) + 
+        return string.Join(",", members.Select(i => string.Format("[{0},{1}]", i.x, i.y))) +
             ":[" + pivot.x + "," + pivot.y + "]";
+    }
+
+    public override int GetHashCode()
+    {
+        int hash = 1;
+        Action<int> addHash = (x) => { hash = hash * 1103515245 + x; };
+        addHash(pivot.x);
+        addHash(pivot.y);
+        foreach (var cell in members)
+        {
+            addHash(cell.x);
+            addHash(cell.y);
+        }
+        return hash;
     }
 }
 
@@ -955,6 +924,8 @@ public static class Program
         }
 
         var board = new Board(input);
+        Console.WriteLine(board);
+
         Unit piece = null;
         var sourceEnum = source.GetEnumerator();
 
