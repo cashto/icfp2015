@@ -7,7 +7,7 @@ g = JSON.parse(
 
 apiToken = 'rTtrTF3dLjQK/pN16VMLkg6zxstoXlwOUa06jqRVr48='
 teamId = 183
-problemSet = [24]
+problemSet = [0 ... 23]
 problemFiles = ('problem_' + i for i in problemSet)
 timeLimitSeconds = 600
 phrasesOfPower = [
