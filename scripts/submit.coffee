@@ -5,11 +5,15 @@ execFile = require('child_process').execFile
 g = JSON.parse(
     fs.readFileSync('../work/g.json'), { encoding: 'utf8' })
 
+throw "Syntax: submit timeLimitSeconds" if process.argv.length isnt 4
+throw "done";
+    
 apiToken = 'rTtrTF3dLjQK/pN16VMLkg6zxstoXlwOUa06jqRVr48='
+commit = process.argv[2]
+timeLimitSeconds = Number(process.argv[3])
 teamId = 183
 problemSet = [0 ... 23]
 problemFiles = ('problem_' + i for i in problemSet)
-timeLimitSeconds = 600
 phrasesOfPower = [
     'Ei!'
     'Ia! Ia!'
@@ -50,6 +54,8 @@ runOne = (problem, cb) ->
         throw error if error?
         
         answers = JSON.parse(stdout)
+        answers.time = new Date().toISOString()
+        answers.commit = commit
         
         for ans in answers
             problemKey = "#{problem.file}-#{ans.output.seed}"

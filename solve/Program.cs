@@ -9,9 +9,8 @@ using System.Threading.Tasks;
 
 static class Constants
 {
-    public const int GenerateGoalsMaxReturned = 4;
-    public const int GenerateGoalsMaxExamined = 20;
-    public const int BlockedCellPenalty = 10000;
+    public const int GenerateGoalsMaxReturned = 5;
+    public const int TargetLineBonus = 5;
 
     public const char West = 'p';
     public const char East = 'b';
@@ -118,6 +117,78 @@ public class Random
 }
 
 
+class GoalHeuristic : IComparable<GoalHeuristic>
+{
+    public GoalHeuristic(Board board)
+    {
+        this.score = board.score;
+
+        Func<int, int, int> isOccupied = (i, j) =>
+            i >= 0 && i < board.width &&
+            j >= 0 && j < board.height &&
+            board[i, j] ? 1 : 0;
+
+        int uppermostNonemptyRow = board.height - 1;
+
+        neighborCount = 0;
+        for (var y = board.height - 1; y >= 0; --y)
+        {
+            bool isOddLine = (y & 1) != 0;
+            for (var x = 0; x < board.width; ++x)
+            {
+                if (!board[x, y])
+                {
+                    continue;
+                }
+
+                uppermostNonemptyRow = y;
+
+                if (y == 0)
+                {
+                    continue;
+                }
+
+                int nw = x - (isOddLine ? 0 : 1);
+                int ne = x + (isOddLine ? 1 : 0);
+
+                neighborCount +=
+                    isOccupied(nw, y - 1) +
+                    isOccupied(ne, y - 1) +
+                    isOccupied(x - 1, y) +
+                    isOccupied(x + 1, y);
+            }
+        }
+
+        int targetRow = (uppermostNonemptyRow == board.height - 1) ? board.width : board.lineCount(uppermostNonemptyRow + 1);
+        neighborCount += Constants.TargetLineBonus * targetRow;
+    }
+
+    public override string ToString()
+    {
+        return string.Format("{0}.{1}", score, neighborCount);
+    }
+
+    public int CompareTo(GoalHeuristic other)
+    {
+        // We care about things in this order:
+        //    1. Maximize score.
+        //    2a. Maximize (E, W, NE, NW) neighbor count (to encourage clumping).
+        //    2b. Maximize the number of filled cells in the second-most-northmost row 
+        //      (worth five neighbors per cell).
+
+        if (this.score == other.score)
+        {
+            return other.neighborCount - this.neighborCount;
+        }
+
+        return other.score - this.score;
+    }
+
+    public int score;
+    public int neighborCount;
+}
+
+
 class Board
 {
     public Board(Input input)
@@ -133,12 +204,32 @@ class Board
         }
     }
 
-    private Board(Board other, int score)
+    public Board(Board parent, Unit piece)
     {
-        this.score = score;
-        this.width = other.width;
-        this.height = other.height;
-        this.data = other.data.ToArray();
+        this.width = parent.width;
+        this.height = parent.height;
+        this.data = parent.data.ToArray();
+
+        foreach (var cell in piece.members)
+        {
+            this[cell.x, cell.y] = true;
+        }
+
+        linesRemoved = 0;
+        for (var y = 0; y < height; ++y)
+        {
+            if (lineFull(y))
+            {
+                removeLine(y);
+                ++linesRemoved;
+            }
+        }
+
+        int points = piece.members.Count + 100 * (1 + linesRemoved) * linesRemoved / 2;
+        int lineBonus = this.linesRemoved > 1 ? (this.linesRemoved - 1) * points / 10 : 0;
+        this.score = parent.score + points + lineBonus;
+
+        this.heuristicScore = new GoalHeuristic(this);
     }
 
     public bool contains(Unit unit)
@@ -166,30 +257,6 @@ class Board
         return Constants.ForwardMoves.Any(c => !this.contains(piece.go(c)));
     }
 
-    public Board place(Unit piece)
-    {
-        Board ans = new Board(this, this.score + piece.members.Count);
-
-        foreach (var cell in piece.members)
-        {
-            ans.data[cell.x + cell.y * width] = true;
-        }
-
-        var linesRemoved = 0;
-        for (var y = this.height - 1; y >= 0; --y)
-        {
-            if (ans.lineFull(y))
-            {
-                ans.removeLine(y);
-                ++linesRemoved;
-            }
-        }
-
-        ans.score += 100 * (1 + linesRemoved) * linesRemoved / 2;
-
-        return ans;
-    }
-
     public bool this[int x, int y]
     {
         get
@@ -202,55 +269,6 @@ class Board
             this.data[x + y * width] = value;
         }
     }
-
-    public int getGoalHeuristic()
-    {
-        // Higher values are better.        
-
-        // Count number of blocked cells (that match this pattern or its mirror image):
-        //                 # # 
-        //                # . x
-        //                 x x
-
-        Func<int, int, bool> isFree = (i, j) =>
-            i >= 0 && i < this.width &&
-            j >= 0 && j < this.height &&
-            !this[i, j];
-
-        var ans = 0;
-        for (var y = 1; y < this.height; ++y)
-        {
-            bool isOddLine = (y & 1) != 0;
-            for (var x = 0; x < this.width; ++x)
-            {
-                if (!this[x, y])
-                {
-                    int nw = x - (isOddLine ? 0 : 1);
-                    int ne = x + (isOddLine ? 1 : 0);
-
-                    if (!isFree(nw, y - 1) && !isFree(ne, y - 1))
-                    {
-                        if (!isFree(x - 1, y) || !isFree(x + 1, y))
-                        {
-                            ans -= Constants.BlockedCellPenalty;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Return the number filled cells in the most filled of the uppermost three non-empty rows.
-        // (We want to be working on filling one of the topmost three rows).
-        ans += Enumerable.Range(0, this.height)
-            .Select(lineCount)
-            .SkipWhile(i => i == 0)
-            .Take(3)
-            .DefaultIfEmpty(0)
-            .Max();
-
-        return ans;
-    }
-
 
     public override string ToString()
     {
@@ -295,7 +313,7 @@ class Board
         return this.getLine(y).All(i => i == false);
     }
 
-    private int lineCount(int y)
+    public int lineCount(int y)
     {
         return this.getLine(y).Count(i => i == true);
     }
@@ -315,6 +333,8 @@ class Board
     public int width;
     public int height;
     public int score;
+    public int linesRemoved;
+    public GoalHeuristic heuristicScore;
 }
 
 
@@ -331,7 +351,7 @@ class BoardTree
 
     public override string ToString()
     {
-        return string.Format("level={0}, score={1}, heuristic={2}", level, this.board.score, this.board.getGoalHeuristic());
+        return string.Format("level={0}, score={1}, heuristic={2}", level, this.board.score, this.board.heuristicScore);
     }
 
     public BoardTree solve(List<Unit> pieces, TimeSpan timeout)
@@ -339,13 +359,10 @@ class BoardTree
         var currentPosition = this;
         var startTime = DateTime.UtcNow;
 
-        while (DateTime.UtcNow - startTime < timeout)
+        while (currentPosition.level < pieces.Count &&
+            DateTime.UtcNow - startTime < timeout)
         {
-            // Expand currentPosition by a few levels.
-            for (var i = 0; i < 3; ++i)
-            {
-                currentPosition.walk(node => node.expand(pieces[node.level]));
-            }
+            currentPosition.walk(node => node.expand(pieces[node.level]));
             
             var bestNode = currentPosition.findHighestScoringLeafNode();
             if (bestNode != null)
@@ -384,11 +401,10 @@ class BoardTree
             return false;
         }
 
-        Console.WriteLine("Expanding {0}", this);
-        var goals = generateGoals(unit);
-        this.children = goals
+        //Console.WriteLine("Expanding {0}", this);
+
+        this.children = generateGoals(unit)
             .Select(goal => generatePath(unit, goal))
-            .Take(Constants.GenerateGoalsMaxExamined)
             .Where(child => child != null)
             .Take(Constants.GenerateGoalsMaxReturned)
             .ToList();
@@ -430,7 +446,7 @@ class BoardTree
 
     private IEnumerable<Unit> generateGoals(Unit piece)
     {
-        var ans = new List<Tuple<int, Unit>>();
+        var ans = new List<Tuple<GoalHeuristic, Unit>>();
 
         for (var y = board.height - 1; y >= 0; --y)
         {
@@ -444,8 +460,8 @@ class BoardTree
 
                     if (board.contains(movedPiece) && board.canLock(movedPiece))
                     {
-                        ans.Add(new Tuple<int, Unit>(
-                            board.place(movedPiece).getGoalHeuristic(), 
+                        ans.Add(new Tuple<GoalHeuristic, Unit>(
+                            new Board(board, movedPiece).heuristicScore, 
                             movedPiece));
                     }
 
@@ -454,10 +470,10 @@ class BoardTree
             }
         }
 
-        //ans = ans.OrderByDescending(i => i.Item1).ToList();
-        //return ans.Select(i => i.Item2);
+        // ans = ans.OrderBy(i => i.Item1).ToList();
+        // return ans.Select(i => i.Item2);
 
-        return ans.OrderByDescending(i => i.Item1).Select(i => i.Item2);
+        return ans.OrderBy(i => i.Item1).Select(i => i.Item2);
     }
 
     public BoardTree generatePath(Unit start, Unit end)
@@ -468,37 +484,31 @@ class BoardTree
         var rootNode = new GeneratePathNode(end);
         pq.push(rootNode);
 
-        int z = 0;
-
         // Console.WriteLine("{0} -> {1}", end, start);
 
         while (!pq.isEmpty())
         {
             var item = pq.pop();
+            var illegalSet = new HashSet<Unit>();
+            item.getIllegalSet(illegalSet);
 
             // Console.WriteLine("{0}, score={1}", item, item.score(start));
-
-            if (++z % 800 == 0)
-            {
-                //Console.WriteLine("BREAK");
-            }
 
             foreach (var c in Constants.ReverseMoves)
             {
                 var newNode = new GeneratePathNode(item, c);
                 if (newNode.Piece.Equals(start))
                 {
-                    //Console.WriteLine(z);
                     char lockingMove = Constants.ForwardMoves.First(i => willLock(rootNode, i));
                     var ans = new BoardTree(
-                        board.place(end),
+                        new Board(board, end),
                         reversePath(newNode.getPath().Reverse()) + lockingMove,
                         this);
                     ans.goal = end;
                     return ans;
                 }
 
-                if (board.contains(newNode.Piece) && item.isLegal(newNode))
+                if (board.contains(newNode.Piece) && !illegalSet.Contains(newNode.Piece))
                 {
                     if (!set.Contains(newNode.Piece))
                     {
@@ -544,7 +554,7 @@ class BoardTree
     {
         BoardTree ans = null;
         var bestScore = int.MinValue;
-        var bestHeuristic = int.MinValue;
+        GoalHeuristic bestHeuristic = null;
         
         walk(i =>
         {
@@ -553,12 +563,11 @@ class BoardTree
                 return;
             }
 
-            int heuristic = i.board.getGoalHeuristic();
             if (i.board.score > bestScore ||
-               (i.board.score == bestScore && heuristic > bestHeuristic))
+               (i.board.score == bestScore && i.board.heuristicScore.CompareTo(bestHeuristic) < 0))
             {
                 bestScore = i.board.score;
-                bestHeuristic = heuristic;
+                bestHeuristic = i.board.heuristicScore;
                 ans = i;
             }
         });
@@ -600,9 +609,14 @@ class BoardTree
             return distance <= Piece.symmetry / 2 ? distance : Piece.symmetry - distance;
         }
 
-        public bool isLegal(GeneratePathNode node)
+        public void getIllegalSet(HashSet<Unit> illegalSet)
         {
-            return !Piece.Equals(node.Piece) && (Parent == null || Parent.isLegal(node));
+            illegalSet.Add(Piece);
+
+            if (Parent != null)
+            {
+                Parent.getIllegalSet(illegalSet);
+            }
         }
 
         public string getPath()
@@ -953,7 +967,7 @@ public static class Program
         var ans = tree.solve(source, commandLineParams.timeLimit);
         string solution = ans.getFullPath();
 
-        show(input, seed, solution.Replace("/", ""));
+        // show(input, seed, solution.Replace("/", ""));
 
         return new AnnotatedOutput()
         {
@@ -1002,7 +1016,7 @@ public static class Program
                 piece = sourceEnum.Current.center(board.width);
             }
 
-            var nextBoard = board.place(piece);
+            var nextBoard = new Board(board, piece);
             Console.WriteLine(nextBoard);
 
             string friendlyStr = "";
