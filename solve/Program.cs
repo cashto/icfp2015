@@ -160,7 +160,7 @@ class GoalHeuristic : IComparable<GoalHeuristic>
         }
 
         int targetRow = (uppermostNonemptyRow == board.height - 1) ? board.width : board.lineCount(uppermostNonemptyRow + 1);
-        neighborCount /= 4;
+        // neighborCount /= 4;
     }
 
     public override string ToString()
@@ -990,7 +990,7 @@ public static class Program
         var ans = tree.solve(source, commandLineParams.timeLimit);
         string solution = ans.getFullPath();
 
-        show(input, seed, solution);
+        // show(input, seed, solution);
 
         return new AnnotatedOutput()
         {
@@ -1024,7 +1024,7 @@ public static class Program
 
         Unit piece = null;
         var sourceEnum = source.GetEnumerator();
-        var move = 1;
+        var move = 0;
 
         foreach (var c in movesToShow)
         {
@@ -1057,7 +1057,7 @@ public static class Program
             {
                 var nextBoard = new Board(board, piece);
                 ++move;
-                Console.WriteLine("move={0}, score={1}", move, board.heuristicScore);
+                Console.WriteLine("move={0}, score={1}", move, nextBoard.heuristicScore);
                 Console.WriteLine(board.ToString(piece));
                 board = nextBoard;
                 piece = null;
