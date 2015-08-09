@@ -73,8 +73,7 @@ runOne = (problem, cb) ->
             if ans.score >= bestScore
                 data.best = ans
             
-            if ans.score > bestScore    
-                upload(problemKey, [ans.output])
+            #upload(problemKey, [ans.output]) if ans.score > bestScore
             
             g.solutions[problemKey] = data
             fs.writeFileSync('../work/g.json', JSON.stringify(g))

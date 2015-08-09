@@ -9,8 +9,8 @@ using System.Threading.Tasks;
 
 static class Constants
 {
-    public const int GenerateGoalsMaxReturned = 5;
-    public const int TargetLineBonus = 5;
+    public const int LookaheadSearchPly = 4;
+    public const int LookaheadSearchDepth = 3;
 
     public const char West = 'p';
     public const char East = 'b';
@@ -124,16 +124,19 @@ class GoalHeuristic : IComparable<GoalHeuristic>
         this.score = board.score;
 
         Func<int, int, int> isOccupied = (i, j) =>
+            j >= board.height ||
             i >= 0 && i < board.width &&
             j >= 0 && j < board.height &&
             board[i, j] ? 1 : 0;
 
         int uppermostNonemptyRow = board.height - 1;
+        squaredRowCount = 0;
 
         neighborCount = 0;
         for (var y = board.height - 1; y >= 0; --y)
         {
             bool isOddLine = (y & 1) != 0;
+            var rowCount = 0;
             for (var x = 0; x < board.width; ++x)
             {
                 if (!board[x, y])
@@ -141,43 +144,45 @@ class GoalHeuristic : IComparable<GoalHeuristic>
                     continue;
                 }
 
+                ++rowCount;
                 uppermostNonemptyRow = y;
 
-                if (y == 0)
-                {
-                    continue;
-                }
-
-                int nw = x - (isOddLine ? 0 : 1);
-                int ne = x + (isOddLine ? 1 : 0);
+                int sw = x - (isOddLine ? 0 : 1);
+                int se = x + (isOddLine ? 1 : 0);
 
                 neighborCount +=
-                    isOccupied(nw, y - 1) +
-                    isOccupied(ne, y - 1) +
+                    isOccupied(sw, y + 1) +
+                    isOccupied(se, y + 1) +
                     isOccupied(x - 1, y) +
                     isOccupied(x + 1, y);
             }
+            squaredRowCount += rowCount * rowCount;
         }
 
         int targetRow = (uppermostNonemptyRow == board.height - 1) ? board.width : board.lineCount(uppermostNonemptyRow + 1);
-        neighborCount += Constants.TargetLineBonus * targetRow;
+        neighborCount /= 4;
     }
 
     public override string ToString()
     {
-        return string.Format("{0}.{1}", score, neighborCount);
+        return string.Format("{0}.{1}.{2}", score, neighborCount, squaredRowCount);
     }
 
     public int CompareTo(GoalHeuristic other)
     {
         // We care about things in this order:
         //    1. Maximize score.
-        //    2a. Maximize (E, W, NE, NW) neighbor count (to encourage clumping).
-        //    2b. Maximize the number of filled cells in the second-most-northmost row 
+        //    2. Maximize (E, W, SE, SW) neighbor count (to encourage clumping).
+        //    3. Maximize the number of filled cells in the second-most-northmost row 
         //      (worth five neighbors per cell).
 
         if (this.score == other.score)
         {
+            if (other.neighborCount == this.neighborCount)
+            {
+                return other.squaredRowCount - this.squaredRowCount;
+            }
+
             return other.neighborCount - this.neighborCount;
         }
 
@@ -186,6 +191,7 @@ class GoalHeuristic : IComparable<GoalHeuristic>
 
     public int score;
     public int neighborCount;
+    public int squaredRowCount;
 }
 
 
@@ -272,9 +278,12 @@ class Board
 
     public override string ToString()
     {
-        var sb = new StringBuilder();
+        return "\n" + ToString(null);
+    }
 
-        sb.Append('\n');
+    public string ToString(Unit piece = null)
+    {
+        var sb = new StringBuilder();
 
         for (var y = 0; y < height; ++y)
         {
@@ -285,7 +294,8 @@ class Board
 
             for (var x = 0; x < width; ++x)
             {
-                sb.Append(this[x, y] ? '#' : '.');
+                bool isPiece = piece != null && piece.members.Contains(new Cell(x, y));
+                sb.Append(isPiece ? '#' : this[x, y] ? 'o' : '.');
                 sb.Append(' ');
             }
 
@@ -345,7 +355,6 @@ class BoardTree
         this.parent = parent;
         this.board = board;
         this.path = path;
-        this.disappointingChildren = 0;
         this.level = (parent == null ? 0 : parent.level + 1);
     }
 
@@ -356,37 +365,42 @@ class BoardTree
 
     public BoardTree solve(List<Unit> pieces, TimeSpan timeout)
     {
-        var currentPosition = this;
+        var currentNode = this;
         var startTime = DateTime.UtcNow;
 
-        while (currentPosition.level < pieces.Count &&
+        while (currentNode.level < pieces.Count &&
             DateTime.UtcNow - startTime < timeout)
         {
-            currentPosition.walk(node => node.expand(pieces[node.level]));
-            
-            var bestNode = currentPosition.findHighestScoringLeafNode();
-            if (bestNode != null)
+            var depthToSearch = Math.Min(Constants.LookaheadSearchDepth, pieces.Count - currentNode.level);
+            for (var i = 0; i < depthToSearch; ++i)
             {
-                currentPosition = bestNode;
+                currentNode.walk(node => node.expand(pieces[node.level]));
             }
-            else
+            
+            var bestNode = currentNode.findBestLeafNode();
+            while (bestNode == null || bestNode == currentNode)
             {
                 // We've hit a dead end: time to backtrack.
-                do
+                currentNode.isDisappointment = true;
+
+                for (var i = 0; i < Constants.LookaheadSearchDepth; ++i)
                 {
-                    if (currentPosition.parent == null)
+                    if (currentNode.parent == null)
                     {
                         // Can't backtrack any more. We've REALLY hit a dead end.
-                        return findHighestScoringLeafNode();
+                        return findBestLeafNode(true /*includeDisappointments*/);
                     }
-                    
-                    currentPosition = currentPosition.parent;
-                    ++currentPosition.disappointingChildren;
-                } while (currentPosition.children.Count < currentPosition.disappointingChildren);
+
+                    currentNode = currentNode.parent;
+                }
+                
+                bestNode = currentNode.findBestLeafNode();
             }
+
+            currentNode = bestNode;
         }
         
-        return findHighestScoringLeafNode();
+        return findBestLeafNode(true /*includeDisappointments*/);
     }
 
     private bool expand(Unit unit)
@@ -407,7 +421,7 @@ class BoardTree
         this.children = generateGoals(unit)
             .Select(goal => generatePath(unit, goal, inaccessibleSet))
             .Where(child => child != null)
-            .Take(Constants.GenerateGoalsMaxReturned)
+            .Take(Constants.LookaheadSearchPly)
             .ToList();
 
         return this.children.Any();
@@ -559,10 +573,9 @@ class BoardTree
         return sb.ToString();
     }
 
-    private BoardTree findHighestScoringLeafNode()
+    private BoardTree findBestLeafNode(bool includeDisappointments = false)
     {
         BoardTree ans = null;
-        var bestScore = int.MinValue;
         GoalHeuristic bestHeuristic = null;
         
         walk(i =>
@@ -572,12 +585,13 @@ class BoardTree
                 return;
             }
 
-            if (i.board.score > bestScore ||
-               (i.board.score == bestScore && i.board.heuristicScore.CompareTo(bestHeuristic) < 0))
+            if (bestHeuristic == null || i.board.heuristicScore.CompareTo(bestHeuristic) < 0)
             {
-                bestScore = i.board.score;
-                bestHeuristic = i.board.heuristicScore;
-                ans = i;
+                if (includeDisappointments || !i.isDisappointment)
+                {
+                    bestHeuristic = i.board.heuristicScore;
+                    ans = i;
+                }
             }
         });
 
@@ -649,7 +663,7 @@ class BoardTree
 
     private BoardTree parent;
     private List<BoardTree> children;
-    private int disappointingChildren;
+    private bool isDisappointment;
     private int level;
     private Unit goal;
 }
@@ -976,7 +990,7 @@ public static class Program
         var ans = tree.solve(source, commandLineParams.timeLimit);
         string solution = ans.getFullPath();
 
-        // show(input, seed, solution.Replace("/", ""));
+        show(input, seed, solution);
 
         return new AnnotatedOutput()
         {
@@ -1007,10 +1021,10 @@ public static class Program
         }
 
         var board = new Board(input);
-        Console.WriteLine(board);
 
         Unit piece = null;
         var sourceEnum = source.GetEnumerator();
+        var move = 1;
 
         foreach (var c in movesToShow)
         {
@@ -1025,26 +1039,26 @@ public static class Program
                 piece = sourceEnum.Current.center(board.width);
             }
 
-            var nextBoard = new Board(board, piece);
-            Console.WriteLine(nextBoard);
-
-            string friendlyStr = "";
-            switch(c)
-            {
-                case Constants.West: friendlyStr = "W (<=)"; break;
-                case Constants.East: friendlyStr = "E (=>)"; break;
-                case Constants.Northwest: friendlyStr = "NW (^ <=)"; break;
-                case Constants.Northeast: friendlyStr = "NE (^ =>)"; break;
-                case Constants.Southwest: friendlyStr = "SW (v <=)"; break;
-                case Constants.Southeast: friendlyStr = "SE (v =>)"; break;
-                case Constants.Clockwise: friendlyStr = "Rotate"; break;
-                case Constants.CounterClockwise: friendlyStr = "Rotate CCW"; break;
-            }
-            Console.WriteLine("----- Making move {0} -----", friendlyStr);
+            //string friendlyStr = "";
+            //switch(c)
+            //{
+            //    case Constants.West: friendlyStr = "W (<=)"; break;
+            //    case Constants.East: friendlyStr = "E (=>)"; break;
+            //    case Constants.Northwest: friendlyStr = "NW (^ <=)"; break;
+            //    case Constants.Northeast: friendlyStr = "NE (^ =>)"; break;
+            //    case Constants.Southwest: friendlyStr = "SW (v <=)"; break;
+            //    case Constants.Southeast: friendlyStr = "SE (v =>)"; break;
+            //    case Constants.Clockwise: friendlyStr = "Rotate"; break;
+            //    case Constants.CounterClockwise: friendlyStr = "Rotate CCW"; break;
+            //}
 
             var nextPiece = piece.go(c);
             if (!board.contains(nextPiece))
             {
+                var nextBoard = new Board(board, piece);
+                ++move;
+                Console.WriteLine("move={0}, score={1}", move, board.heuristicScore);
+                Console.WriteLine(board.ToString(piece));
                 board = nextBoard;
                 piece = null;
             }
