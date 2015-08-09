@@ -6,7 +6,6 @@ g = JSON.parse(
     fs.readFileSync('../work/g.json'), { encoding: 'utf8' })
 
 throw "Syntax: submit timeLimitSeconds" if process.argv.length isnt 4
-throw "done";
     
 apiToken = 'rTtrTF3dLjQK/pN16VMLkg6zxstoXlwOUa06jqRVr48='
 commit = process.argv[2]
@@ -54,10 +53,12 @@ runOne = (problem, cb) ->
         throw error if error?
         
         answers = JSON.parse(stdout)
-        answers.time = new Date().toISOString()
-        answers.commit = commit
         
         for ans in answers
+            ans.time = new Date().toISOString()
+            ans.commit = commit
+            ans.timeLimitSeconds = timeLimitSeconds
+            
             problemKey = "#{problem.file}-#{ans.output.seed}"
             data = g.solutions[problemKey] or { history: [] }
             data.history.push(ans)
@@ -69,8 +70,10 @@ runOne = (problem, cb) ->
             
             console.log "#{problemKey}: #{bestScore} -> #{ans.score} #{newHigh}"
             
-            if ans.score > bestScore
+            if ans.score >= bestScore
                 data.best = ans
+            
+            if ans.score > bestScore    
                 upload(problemKey, [ans.output])
             
             g.solutions[problemKey] = data

@@ -7,7 +7,8 @@ g = JSON.parse(
 
 if process.argv.length isnt 3
     for key in Object.keys(g.solutions).sort()
-        console.log "#{key}: #{g.solutions[key].best.score}"
+        best = g.solutions[key].best
+        console.log "#{key}: #{best.score} #{best.time} #{(best.commit or "undefined").substring(0,10)} #{best.timeLimitSeconds}"
     return;
     
 problemId = process.argv[2]
