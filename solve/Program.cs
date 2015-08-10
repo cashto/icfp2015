@@ -9,8 +9,8 @@ using System.Threading.Tasks;
 
 static class Constants
 {
-    public const int LookaheadSearchPly = 5;
-    public const int LookaheadSearchDepth = 1;
+    public const int LookaheadSearchPly = 4;
+    public const int LookaheadSearchDepth = 3;
 
     public const char West = 'p';
     public const char East = 'b';
@@ -219,7 +219,6 @@ class Board
         this.width = parent.width;
         this.height = parent.height;
         this.data = parent.data.ToArray();
-        this.usedPhrasesOfPower = parent.usedPhrasesOfPower.ToList();
 
         foreach (var cell in piece.members)
         {
@@ -285,11 +284,11 @@ class Board
     {
         if (!this.usedPhrasesOfPower.Contains(phrase))
         {
-            this.score += 300;
+            bonusPoints += 300;
             this.usedPhrasesOfPower.Add(phrase);
         }
 
-        this.score += 2 * phrase.Length;
+        bonusPoints += 2 * phrase.Length;
     }
 
     public Unit findEndCell(Unit piece, string phrase)
@@ -415,6 +414,7 @@ class Board
     public int width;
     public int height;
     public int score;
+    public int bonusPoints;
     public int linesRemoved;
     public GoalHeuristic heuristicScore;
     public List<string> usedPhrasesOfPower;
@@ -475,6 +475,11 @@ class BoardTree
             }
 
             currentNode = bestNode;
+
+            foreach (var node in currentNode.walkToRoot().Skip(3).Reverse())
+            {
+                node.insertPhrasesOfPowerAndLockingMove();
+            }
         }
         
         return findBestLeafNode(true /*includeDisappointments*/);
@@ -492,11 +497,11 @@ class BoardTree
             return false;
         }
 
-        // Console.Error.WriteLine("Expanding {0}", this);
+        Program.Log("Expanding {0}", this);
         var inaccessibleSet = new HashSet<Unit>();
 
         this.children = generateGoals(unit)
-            .Select(goal => generatePath(unit, goal, inaccessibleSet))
+            .Select(goal => generatePath(this.board, unit, goal, inaccessibleSet))
             .Where(child => child != null)
             .Take(Constants.LookaheadSearchPly)
             .ToList();
@@ -519,24 +524,21 @@ class BoardTree
         }
     }
 
-    private void walkFromRoot(Action<BoardTree> fn)
+    private IEnumerable<BoardTree> walkToRoot()
     {
-        var nodes = new List<BoardTree>();
         for (var node = this; node != null; node = node.parent)
         {
-            nodes.Add(node);
-        }
-
-        foreach (var node in nodes.Reverse<BoardTree>())
-        {
-            fn(node);
+            yield return node;
         }
     }
 
     public string getFullPath()
     {
         string ans = "";
-        walkFromRoot(i => ans = ans + i.insertPhrasesOfPowerAndLockingMove().path);
+        foreach (var i in walkToRoot().Reverse())
+        {
+            ans += i.insertPhrasesOfPowerAndLockingMove().path;
+        }
         return ans;
     }
 
@@ -569,11 +571,16 @@ class BoardTree
         return ans.OrderBy(i => i.Item1).Select(i => i.Item2);
     }
 
-    public BoardTree generatePath(Unit start, Unit end, HashSet<Unit> inaccessibleSet, HashSet<Unit> extraIllegalSet = null)
+    public BoardTree generatePath(
+        Board board,
+        Unit start, 
+        Unit end, 
+        HashSet<Unit> inaccessibleSet, 
+        HashSet<Unit> extraIllegalSet = null)
     {
         if (start.Equals(end))
         {
-            return new BoardTree(this.board, "", this, start, end);
+            return new BoardTree(board, "", this, start, end);
         }
 
         if (extraIllegalSet != null && extraIllegalSet.Contains(start))
@@ -588,7 +595,7 @@ class BoardTree
         var rootNode = new GeneratePathNode(end);
         pq.push(rootNode);
 
-        // Console.WriteLine("{0} -> {1}", end, start);
+        // Program.Log("{0} -> {1}", end, start);
 
         while (!pq.isEmpty())
         {
@@ -607,7 +614,7 @@ class BoardTree
             var illegalSet = new HashSet<Unit>();
             item.getIllegalSet(illegalSet);
 
-            //Console.WriteLine("{0}, score={1}", item, item.score(start));
+            // Program.Log("{0}, score={1}", item, item.score(start));
 
             foreach (var c in Constants.ReverseMoves)
             {
@@ -615,9 +622,27 @@ class BoardTree
 
                 if (newNode.Piece.Equals(start))
                 {
+                    var ans = newNode.getReversePath();
+
+                    // Sanity check.
+                    //if (!start.go(ans).Equals(end))
+                    //{
+                    //    throw new Exception();
+                    //}
+
+                    //var idx = 0;
+                    //for (var t = newNode; t.Parent != null; t = t.Parent)
+                    //{
+                    //    if (!t.Piece.go(ans.Substring(ans.Length - 1 - idx)).Equals(end))
+                    //    {
+                    //        throw new Exception();
+                    //    }
+                    //    ++idx;
+                    //}
+
                     return new BoardTree(
                         new Board(board, end),
-                        reversePath(newNode.getPath().Reverse()),
+                        newNode.getReversePath(),
                         this,
                         start,
                         end);
@@ -641,16 +666,21 @@ class BoardTree
 
     private BoardTree insertPhrasesOfPowerAndLockingMove()
     {
-        Console.WriteLine("inserting phrase of power");
+        if (this.insertedPhrasesOfPower)
+        {
+            return this;
+        }
 
         if (this.parent == null)
         {
             return this;
         }
 
+        Program.Log("inserting phrase of power {0}", this);
+
+        this.board.usedPhrasesOfPower = this.parent.board.usedPhrasesOfPower.ToList();
+        this.board.bonusPoints = this.parent.board.bonusPoints;
         var path = "";
-        var temp = this.board;
-        this.board = parent.board;
 
         // Insert as many phrases of power as possible.
         var start = this.start;
@@ -659,14 +689,14 @@ class BoardTree
         {
         }
 
-        var endPath = generatePath(start, this.end, new HashSet<Unit>());
+        var endPath = generatePath(this.parent.board, start, this.end, new HashSet<Unit>());
         path += endPath.path;
 
         // Add locking move.
         path += Constants.ForwardMoves.First(dir => !this.board.contains(this.end.go(dir)));
         
         this.path = path;
-        this.board = temp;
+        this.insertedPhrasesOfPower = true;
 
         return this;
     }
@@ -703,7 +733,7 @@ class BoardTree
                 }
 
                 // Optimization: generate one path with the empty set of illegal moves in order to populate the inaccessible set.
-                var test = this.generatePath(start, phraseStart, inaccessibleSet, emptySet);
+                var test = this.generatePath(this.parent.board, start, phraseStart, inaccessibleSet, emptySet);
                 if (test == null)
                 {
                     continue;
@@ -714,7 +744,7 @@ class BoardTree
                 illegalSet.Remove(phraseStart);
                 addToIllegalSet(illegalSet, this.start, path);
 
-                var pathToPhrase = this.generatePath(start, phraseStart, new HashSet<Unit>(), illegalSet);
+                var pathToPhrase = this.generatePath(this.parent.board, start, phraseStart, new HashSet<Unit>(), illegalSet);
                 if (pathToPhrase == null)
                 {
                     continue;
@@ -730,10 +760,25 @@ class BoardTree
                 addToIllegalSet(illegalSet, start, pathToPhrase.path);
                 illegalSet.Add(phraseStart);
 
-                var pathAfterPhrase = this.generatePath(phraseEnd, end, new HashSet<Unit>(), illegalSet);
+                var pathAfterPhrase = this.generatePath(this.parent.board, phraseEnd, end, new HashSet<Unit>(), illegalSet);
                 if (pathAfterPhrase == null)
                 {
                     continue;
+                }
+
+                // Sanity check.
+                var totalPath = path + pathToPhrase.path + phrase + pathAfterPhrase.path;
+                if (checkAgainstIllegalSet(
+                    new HashSet<Unit>(),
+                    this.start,
+                    totalPath))
+                {
+                    throw new Exception();
+                }
+
+                if (!this.start.go(totalPath).Equals(this.end))
+                {
+                    throw new Exception();
                 }
 
                 path += pathToPhrase.path + phrase;
@@ -772,28 +817,21 @@ class BoardTree
     }
 
 
-    private static string reversePath(IEnumerable<char> s)
+    private static char reverseDir(char c)
     {
-        var sb = new StringBuilder();
-
-        foreach (var c in s)
+        switch (c)
         {
-            switch (c)
-            {
-                case Constants.East: sb.Append(Constants.West); break;
-                case Constants.Northeast: sb.Append(Constants.Southwest); break;
-                case Constants.Northwest: sb.Append(Constants.Southeast); break;
-                case Constants.West: sb.Append(Constants.East); break;
-                case Constants.Southwest: sb.Append(Constants.Northeast); break;
-                case Constants.Southeast: sb.Append(Constants.Northwest); break;
-                case Constants.Clockwise: sb.Append(Constants.CounterClockwise); break;
-                case Constants.CounterClockwise: sb.Append(Constants.Clockwise); break;
-                default:
-                    throw new Exception();
-            }
+            case Constants.East: return Constants.West;
+            case Constants.Northeast: return Constants.Southwest;
+            case Constants.Northwest: return Constants.Southeast;
+            case Constants.West: return Constants.East;
+            case Constants.Southwest: return Constants.Northeast;
+            case Constants.Southeast: return Constants.Northwest;
+            case Constants.Clockwise: return Constants.CounterClockwise;
+            case Constants.CounterClockwise: return Constants.Clockwise;
+            default:
+                throw new Exception();
         }
-
-        return sb.ToString();
     }
 
     private BoardTree findBestLeafNode(bool includeDisappointments = false)
@@ -865,19 +903,19 @@ class BoardTree
             }
         }
 
-        public string getPath()
+        public string getReversePath()
         {
-            if (Parent == null)
+            var sb = new StringBuilder();
+            for (var node = this; node.Parent != null; node = node.Parent)
             {
-                return "";
+                sb.Append(reverseDir(node.Move));
             }
-
-            return Parent.getPath() + this.Move;
+            return sb.ToString();
         }
 
         public override string ToString()
         {
-            return string.Format("piece={0}, path={1}", this.Piece, this.getPath());
+            return string.Format("piece={0}, rpath={1}", this.Piece, getReversePath());
         }
     }
 
@@ -890,6 +928,7 @@ class BoardTree
     private int level;
     private Unit start;
     private Unit end;
+    private bool insertedPhrasesOfPower;
 }
 
 
@@ -1011,6 +1050,16 @@ class Unit : IEquatable<Unit>, ICloneable
     public bool Equals(Unit other)
     {
         return this.pivot.Equals(other.pivot) && this.members.All(i => other.members.Contains(i));
+    }
+
+    public Unit go (string s)
+    {
+        Unit ans = this;
+        foreach (var c in s)
+        {
+            ans = ans.go(c);
+        }
+        return ans;
     }
 
     public Unit go(char direction)
@@ -1274,13 +1323,11 @@ public static class Program
 
         var tree = new BoardTree(new Board(input));
         var ans = tree.solve(source, commandLineParams.timeLimit);
-        var startTime = DateTime.UtcNow;
         string solution = ans.getFullPath();
-        Console.WriteLine((DateTime.UtcNow - startTime).Ticks);
 
         return new AnnotatedOutput()
         {
-            score = ans.board.score,
+            score = ans.board.score + ans.board.bonusPoints,
             output = new Output()
             {
                 problemId = input.id,
@@ -1367,5 +1414,10 @@ public static class Program
         show(input, output.First().output.seed, output.First().output.solution);
 
         Console.WriteLine(JsonConvert.SerializeObject(output, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }));
+    }
+
+    public static void Log(string format, params object[] data)
+    {
+        Console.WriteLine(format, data);
     }
 }
