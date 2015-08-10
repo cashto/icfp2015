@@ -1,6 +1,13 @@
 cashto -- cashto@gmail.com -- Chris Ashton -- Seattle, WA
 
-Strategy: 
+Final strategy:
+    1. Depth-first search with lookahead.
+    2. Heuristic: maximize the number of adjacent filled cells. (Also maximize the square of the number of filled squares in a line, but that is secondary). 
+    3. For each piece, after we find a path for it from the spawn cell to its final destination, go back and insert phrases of power.
+    4. Search ply is variable depending on the amount of time left in the run.
+    5. Parallelism -- spawn a new thread for every seed we have to process (but if there is only one seed, there is no parallelism).
+
+Lightning strategy: 
     1. Given a piece and a board, generate a set of "goal" states for the piece (heuristic: the more empty spaces at the top of the board, the better).
     2. For each goal state, generate a path (using A*) to that goal state (actually, from end state to start state, and then reverse the path).
     3. Repeat 1 and 2 for each piece, building a tree of possible moves.

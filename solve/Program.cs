@@ -783,31 +783,6 @@ class BoardTree
                     continue;
                 }
 
-                // Sanity check.
-                //var totalPath = path + pathToPhrase.path + phrase + pathAfterPhrase.path;
-                //if (checkAgainstIllegalSet(
-                //    new HashSet<Unit>(),
-                //    this.start,
-                //    totalPath))
-                //{
-                //    throw new Exception();
-                //}
-
-                //var t = this.start;
-                //foreach (var c in totalPath)
-                //{
-                //    t = t.go(c);
-                //    if (!this.parent.board.contains(t))
-                //    {
-                //        throw new Exception();
-                //    }
-                //}
-
-                //if (!t.Equals(this.end))
-                //{
-                //    throw new Exception();
-                //}
-
                 path += pathToPhrase.path + phrase;
                 start = phraseEnd;
                 board.addPhraseOfPower(phrase);
@@ -1358,20 +1333,6 @@ public static class Program
         var tree = new BoardTree(new Board(input));
         var ans = tree.solve(source, commandLineParams);
         string solution = ans.getFullPath();
-
-        foreach (var node in ans.walkToRoot().Reverse())
-        {
-            Program.Log(node.ToString());
-            if (node.board.linesRemoved > 1 || (node.parent != null && node.parent.board.linesRemoved > 1))
-            {
-                Program.Log(node.board.linesRemoved.ToString());
-            }
-
-        //    Program.Log(node.oldPath ?? "none"); 
-        //    Program.Log(node.path);
-            Program.Log(node.board.ToString(node.end));
-            Program.Log("");
-        }
 
         return new AnnotatedOutput()
         {
