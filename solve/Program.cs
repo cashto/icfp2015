@@ -1461,7 +1461,7 @@ public static class Program
 
         var threads = new List<Thread>();
         var output = new List<AnnotatedOutput>();
-        foreach (var seed_ in input.sourceSeeds)
+        foreach (var seed_ in input.sourceSeeds.Where(seed => !commandLineParams.randomSeed.HasValue || seed == commandLineParams.randomSeed.Value))
         {
             var seed = seed_;
             var thread = new Thread(() =>
