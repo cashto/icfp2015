@@ -524,7 +524,7 @@ class BoardTree
         }
     }
 
-    private IEnumerable<BoardTree> walkToRoot()
+    public IEnumerable<BoardTree> walkToRoot()
     {
         for (var node = this; node != null; node = node.parent)
         {
@@ -682,18 +682,27 @@ class BoardTree
         this.board.bonusPoints = this.parent.board.bonusPoints;
         var path = "";
 
+        this.oldPath = this.path;
+
         // Insert as many phrases of power as possible.
-        var start = this.start;
-        var extraIllegalSet = new HashSet<Unit>();
-        while (insertOnePhraseOfPower(ref path, ref start, this.end))
+        if (true)
         {
+            var start = this.start;
+            var extraIllegalSet = new HashSet<Unit>();
+            while (insertOnePhraseOfPower(ref path, ref start, this.end))
+            {
+            }
+
+            var endPath = generatePath(this.parent.board, start, this.end, new HashSet<Unit>());
+            path += endPath.path;
+        }
+        else
+        {
+            path = this.path;
         }
 
-        var endPath = generatePath(this.parent.board, start, this.end, new HashSet<Unit>());
-        path += endPath.path;
-
         // Add locking move.
-        path += Constants.ForwardMoves.First(dir => !this.board.contains(this.end.go(dir)));
+        path += Constants.ForwardMoves.First(dir => !this.parent.board.contains(this.end.go(dir)));
         
         this.path = path;
         this.insertedPhrasesOfPower = true;
@@ -776,7 +785,17 @@ class BoardTree
                     throw new Exception();
                 }
 
-                if (!this.start.go(totalPath).Equals(this.end))
+                var t = this.start;
+                foreach (var c in totalPath)
+                {
+                    t = t.go(c);
+                    if (!this.parent.board.contains(t))
+                    {
+                        throw new Exception();
+                    }
+                }
+
+                if (!t.Equals(this.end))
                 {
                     throw new Exception();
                 }
@@ -921,13 +940,14 @@ class BoardTree
 
     public Board board;
     public string path;
+    public string oldPath;
 
     private BoardTree parent;
     private List<BoardTree> children;
     private bool isDisappointment;
     private int level;
     private Unit start;
-    private Unit end;
+    public Unit end;
     private bool insertedPhrasesOfPower;
 }
 
@@ -1325,6 +1345,15 @@ public static class Program
         var ans = tree.solve(source, commandLineParams.timeLimit);
         string solution = ans.getFullPath();
 
+        foreach (var node in ans.walkToRoot().Reverse())
+        {
+            Program.Log(node.ToString());
+            Program.Log(node.oldPath ?? "none"); 
+            Program.Log(node.path);
+            Program.Log(node.board.ToString(node.end));
+            Program.Log("");
+        }
+
         return new AnnotatedOutput()
         {
             score = ans.board.score + ans.board.bonusPoints,
@@ -1370,6 +1399,11 @@ public static class Program
                 }
 
                 piece = sourceEnum.Current.center(board.width);
+                if (!board.contains(piece))
+                {
+                    Console.WriteLine("----- End of game -----");
+                    break;
+                }
             }
 
             var nextPiece = piece.go(c);
