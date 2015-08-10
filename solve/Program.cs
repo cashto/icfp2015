@@ -490,7 +490,6 @@ class BoardTree
         this.children = generateGoals(unit)
             .Select(goal => generatePath(unit, goal, inaccessibleSet))
             .Where(child => child != null)
-            .Select(insertPhrasesOfPowerAndLockingMove)
             .Take(Constants.LookaheadSearchPly)
             .ToList();
 
@@ -514,18 +513,22 @@ class BoardTree
 
     private void walkFromRoot(Action<BoardTree> fn)
     {
-        if (parent != null)
+        var nodes = new List<BoardTree>();
+        for (var node = this; node != null; node = node.parent)
         {
-            parent.walkFromRoot(fn);
+            nodes.Add(node);
         }
 
-        fn(this);
+        foreach (var node in nodes.Reverse<BoardTree>())
+        {
+            fn(node);
+        }
     }
 
     public string getFullPath()
     {
         string ans = "";
-        walkFromRoot(i => ans = ans + i.path);
+        walkFromRoot(i => ans = ans + i.insertPhrasesOfPowerAndLockingMove().path);
         return ans;
     }
 
@@ -616,32 +619,30 @@ class BoardTree
         return null;
     }
 
-    private static BoardTree insertPhrasesOfPowerAndLockingMove(BoardTree node)
+    private BoardTree insertPhrasesOfPowerAndLockingMove()
     {
+        if (this.level == 0)
+        {
+            return this;
+        }
+
         var path = "";
 
         // Insert as many phrases of power as possible.
-        if (false)
+        var start = this.start;
+        while (insertOnePhraseOfPower(ref path, ref start, this.end))
         {
-            var start = node.start;
-            while (node.insertOnePhraseOfPower(ref path, ref start, node.end))
-            {
-            }
+        }
 
-            var endPath = node.generatePath(start, node.end, new HashSet<Unit>());
-            path += endPath.path;
-        }
-        else
-        {
-            path = node.path;
-        }
-        
+        var endPath = generatePath(start, this.end, new HashSet<Unit>());
+        path += endPath.path;
+
         // Add locking move.
-        path += Constants.ForwardMoves.First(dir => !node.board.contains(node.end.go(dir)));
+        path += Constants.ForwardMoves.First(dir => !this.board.contains(this.end.go(dir)));
         
-        node.path = path;
+        this.path = path;
 
-        return node;
+        return this;
     }
 
     private bool insertOnePhraseOfPower(ref string path, ref Unit start, Unit end)
@@ -942,64 +943,17 @@ class Unit : IEquatable<Unit>, ICloneable
 
     public Unit go(char direction)
     {
-        switch (direction)
+        switch (Program.canonicalize(direction))
         {
-            case Constants.West:
-            case '\'':
-            case '!':
-            case '.':
-            case '0':
-            case '3':
-                return move(new Cell(-1, 0));
-
-            case Constants.East:
-            case 'c':
-            case 'e':
-            case 'f':
-            case 'y':
-            case '2':
-                return move(new Cell(1, 0));
-
-            case Constants.Southwest:
-            case 'g':
-            case 'h':
-            case 'i':
-            case 'j':
-            case '4':
-                return move(new Cell(-1, 1));
-
-            case Constants.Southeast:
-            case 'm':
-            case 'n':
-            case 'o':
-            case ' ':
-            case '5':
-                return move(new Cell(0, 1));
-
-            case Constants.Clockwise:
-            case 'q':
-            case 'r':
-            case 'v':
-            case 'z':
-            case '1':
-                return rotate(true);
-
-            case Constants.CounterClockwise:
-            case 's':
-            case 't':
-            case 'u':
-            case 'w':
-            case 'x':
-                return rotate(false);
-
-            case Constants.Northwest:
-                return move(new Cell(0, -1));
-
-            case Constants.Northeast:
-                return move(new Cell(1, -1));
-
-            default:
-                throw new Exception();
+            case Constants.West: return move(new Cell(-1, 0));
+            case Constants.East: return move(new Cell(1, 0));
+            case Constants.Southwest: return move(new Cell(-1, 1));
+            case Constants.Southeast: return move(new Cell(0, 1));
+            case Constants.Clockwise: return rotate(true);
+            case Constants.CounterClockwise: return rotate(false);
+            case Constants.Northwest: return move(new Cell(0, -1));
+            case Constants.Northeast: return move(new Cell(1, -1));
+            default: return move(new Cell(0, 0));
         }
     }
 
@@ -1182,6 +1136,63 @@ public static class Program
         }
     }
 
+    public static char canonicalize(char c)
+    {
+        switch (char.ToLowerInvariant(c))
+        {
+            case 'p':
+            case '\'':
+            case '!':
+            case '.':
+            case '0':
+            case '3':
+                return Constants.West;
+
+            case 'b':
+            case 'c':
+            case 'e':
+            case 'f':
+            case 'y':
+            case '2':
+                return Constants.East;
+
+            case 'a':
+            case 'g':
+            case 'h':
+            case 'i':
+            case 'j':
+            case '4':
+                return Constants.Southwest;
+
+            case 'l':
+            case 'm':
+            case 'n':
+            case 'o':
+            case ' ':
+            case '5':
+                return Constants.Southeast;
+
+            case 'd':
+            case 'q':
+            case 'r':
+            case 'v':
+            case 'z':
+            case '1':
+                return Constants.Clockwise;
+
+            case 'k':
+            case 's':
+            case 't':
+            case 'u':
+            case 'w':
+            case 'x':
+                return Constants.CounterClockwise;
+
+            default:
+                return c;
+        }
+    }
+
     static AnnotatedOutput solve(CommandLineParams commandLineParams, Input input, UInt32 seed)
     {
         var source = new List<Unit>();
@@ -1243,19 +1254,6 @@ public static class Program
                 piece = sourceEnum.Current.center(board.width);
             }
 
-            //string friendlyStr = "";
-            //switch(c)
-            //{
-            //    case Constants.West: friendlyStr = "W (<=)"; break;
-            //    case Constants.East: friendlyStr = "E (=>)"; break;
-            //    case Constants.Northwest: friendlyStr = "NW (^ <=)"; break;
-            //    case Constants.Northeast: friendlyStr = "NE (^ =>)"; break;
-            //    case Constants.Southwest: friendlyStr = "SW (v <=)"; break;
-            //    case Constants.Southeast: friendlyStr = "SE (v =>)"; break;
-            //    case Constants.Clockwise: friendlyStr = "Rotate"; break;
-            //    case Constants.CounterClockwise: friendlyStr = "Rotate CCW"; break;
-            //}
-
             var nextPiece = piece.go(c);
             if (!board.contains(nextPiece))
             {
@@ -1287,8 +1285,7 @@ public static class Program
         }
 
         Constants.PhrasesOfPower = commandLineParams.phrasesOfPower
-            .Select(i => i.ToLowerInvariant())
-            .OrderByDescending(i => (10000 * i.Length) / i.Count(c => Constants.DownMoves.Contains(c)))
+            .OrderByDescending(i => (10000 * i.Length) / i.ToLowerInvariant().Count(c => Constants.DownMoves.Contains(c)))
             .ToList();
 
         var output = input.sourceSeeds
