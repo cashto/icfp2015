@@ -312,10 +312,18 @@ class Board
         return piece;
     }
 
-    public bool stutters(Unit start, string newPath)
+    public HashSet<Unit> getIllegalSet(Unit piece, string path)
     {
-        //throw new NotImplementedException();
-        return false;
+        var set = new HashSet<Unit>();
+
+        set.Add(piece);
+        foreach (char c in path)
+        {
+            piece = piece.go(c);
+            set.Add(piece);
+        }
+
+        return set;
     }
 
     public IEnumerable<Unit> getPossibleLocations(Unit piece)
@@ -561,11 +569,16 @@ class BoardTree
         return ans.OrderBy(i => i.Item1).Select(i => i.Item2);
     }
 
-    public BoardTree generatePath(Unit start, Unit end, HashSet<Unit> inaccessibleSet)
+    public BoardTree generatePath(Unit start, Unit end, HashSet<Unit> inaccessibleSet, HashSet<Unit> extraIllegalSet = null)
     {
         if (start.Equals(end))
         {
-            new BoardTree(this.board, "", this, start, end);
+            return new BoardTree(this.board, "", this, start, end);
+        }
+
+        if (extraIllegalSet != null && extraIllegalSet.Contains(start))
+        {
+            return null;
         }
 
         var pq = new PriorityQueue<GeneratePathNode>((i, j) => i.score(start) > j.score(start));
@@ -585,15 +598,21 @@ class BoardTree
             {
                 break;
             }
-            
+
+            if (extraIllegalSet != null && extraIllegalSet.Contains(item.Piece))
+            {
+                continue;
+            }
+
             var illegalSet = new HashSet<Unit>();
             item.getIllegalSet(illegalSet);
 
-            // Console.WriteLine("{0}, score={1}", item, item.score(start));
+            //Console.WriteLine("{0}, score={1}", item, item.score(start));
 
             foreach (var c in Constants.ReverseMoves)
             {
                 var newNode = new GeneratePathNode(item, c);
+
                 if (newNode.Piece.Equals(start))
                 {
                     return new BoardTree(
@@ -604,7 +623,8 @@ class BoardTree
                         end);
                 }
 
-                if (board.contains(newNode.Piece) && !illegalSet.Contains(newNode.Piece))
+                if (board.contains(newNode.Piece) && 
+                    !illegalSet.Contains(newNode.Piece))
                 {
                     if (!set.Contains(newNode.Piece))
                     {
@@ -621,6 +641,8 @@ class BoardTree
 
     private BoardTree insertPhrasesOfPowerAndLockingMove()
     {
+        Console.WriteLine("inserting phrase of power");
+
         if (this.level == 0)
         {
             return this;
@@ -630,6 +652,7 @@ class BoardTree
 
         // Insert as many phrases of power as possible.
         var start = this.start;
+        var extraIllegalSet = new HashSet<Unit>();
         while (insertOnePhraseOfPower(ref path, ref start, this.end))
         {
         }
@@ -645,10 +668,11 @@ class BoardTree
         return this;
     }
 
-    private bool insertOnePhraseOfPower(ref string path, ref Unit start, Unit end)
+    private bool insertOnePhraseOfPower(
+        ref string path, 
+        ref Unit start, 
+        Unit end)
     {
-        var inaccessibleSet = new HashSet<Unit>();
-
         // Prefer to try unused phrases first.
         var unusedPhrases = new List<string>();
         var usedPhrases = new List<string>();
@@ -672,22 +696,41 @@ class BoardTree
                     break;
                 }
 
-                var pathToPhrase = this.generatePath(start, phraseStart, inaccessibleSet);
+                var inaccessibleSet = new HashSet<Unit>();
+                var illegalSet = new HashSet<Unit>();
+
+                addToIllegalSet(illegalSet, phraseStart, phrase);
+                illegalSet.Remove(phraseStart);
+                addToIllegalSet(illegalSet, this.start, path);
+                
+                var pathToPhrase = this.generatePath(start, phraseStart, inaccessibleSet, illegalSet);
                 if (pathToPhrase == null)
                 {
                     continue;
                 }
 
-                var pathAfterPhrase = this.generatePath(phraseEnd, end, inaccessibleSet);
+                // Special case: if pathToPhrase is the null path, then phrase might be illegal right after path.
+                if (pathToPhrase.path.Length == 0 &&
+                    checkAgainstIllegalSet(new HashSet<Unit>(), start, path + phrase))
+                {
+                    continue;
+                }
+
+                addToIllegalSet(illegalSet, start, pathToPhrase.path);
+                illegalSet.Add(phraseStart);
+
+                var pathAfterPhrase = this.generatePath(phraseEnd, end, inaccessibleSet, illegalSet);
                 if (pathAfterPhrase == null)
                 {
                     continue;
                 }
 
-                string newPath = path + pathToPhrase.path + phrase + pathAfterPhrase;
-                if (this.board.stutters(start, newPath))
+                if (checkAgainstIllegalSet(
+                    new HashSet<Unit>(), 
+                    this.start, 
+                    path + pathToPhrase.path + phrase + pathAfterPhrase.path))
                 {
-                    continue;
+                    throw new Exception();
                 }
 
                 path += pathToPhrase.path + phrase;
@@ -699,6 +742,32 @@ class BoardTree
 
         return false;
     }
+
+    private static void addToIllegalSet(HashSet<Unit> illegalSet, Unit piece, string path)
+    {
+        foreach (var c in path)
+        {
+            illegalSet.Add(piece);
+            piece = piece.go(c);
+        }
+    }
+
+    private static bool checkAgainstIllegalSet(HashSet<Unit> illegalSet, Unit piece, string path)
+    {
+        foreach (var c in path)
+        {
+            piece = piece.go(c);
+            if (illegalSet.Contains(piece))
+            {
+                return true;
+            }
+            
+            illegalSet.Add(piece);
+        }
+
+        return false;
+    }
+
 
     private static string reversePath(IEnumerable<char> s)
     {
@@ -1024,14 +1093,11 @@ class Unit : IEquatable<Unit>, ICloneable
 
     public override int GetHashCode()
     {
-        int hash = 1;
-        Action<int> addHash = (x) => { hash = hash * 1103515245 + x; };
-        addHash(pivot.x);
-        addHash(pivot.y);
+        int hash = pivot.x + (pivot.y << 8);
         foreach (var cell in members)
         {
-            addHash(cell.x);
-            addHash(cell.y);
+            hash += (cell.x << 16);
+            hash += (cell.y << 24);
         }
         return hash;
     }
