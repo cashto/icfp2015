@@ -11,7 +11,7 @@ apiToken = 'rTtrTF3dLjQK/pN16VMLkg6zxstoXlwOUa06jqRVr48='
 commit = process.argv[2]
 timeLimitSeconds = Number(process.argv[3])
 teamId = 183
-problemSet = [0]
+problemSet = [0 .. 24]
 cutoff = []
 cutoff[0] = 300
 cutoff[1] = 1000
@@ -29,7 +29,7 @@ cutoff[22] = 3000
 cutoff[23] = 1000
 
 pops = []
-pops[0] = ['Ei!', 'Ia! Ia!', 'R\'lyeh', 'Yuggoth']
+pops[0] = ['Ei!', 'Ia! Ia!', 'R\'lyeh', 'Yuggoth', 'Bigboote', 'Cthulhu']
 pops[1] = ['Cthulhu']
 pops[10] = ['fhtagn']
 pops[13] = ['niggurath']
@@ -50,6 +50,8 @@ phrasesOfPower = [
     'Ia! Ia!'
     'R\'lyeh'
     'Yuggoth'
+    'Bigboote'
+    'Cthulhu'
 ]
 
 concurrency = os.cpus().length
@@ -112,7 +114,7 @@ runOne = (problem, cb) ->
             
             #ans.output.tag = 'testing'
             
-            #upload(problemKey, [ans.output]) if ans.score > bestScore
+            upload(problemKey, [data.best.output])
             
             g.solutions[problemKey] = data
             fs.writeFileSync('../work/g.json', JSON.stringify(g))

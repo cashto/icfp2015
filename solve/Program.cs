@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 
@@ -472,7 +473,13 @@ class BoardTree
             
             for (var i = 0; i < Constants.LookaheadSearchDepth; ++i)
             {
-                currentNode.walk(node => node.expand(pieces[node.level], ply));
+                currentNode.walk(node =>
+                    {
+                        if (node.level < pieces.Count)
+                        {
+                            node.expand(pieces[node.level], ply);
+                        }
+                    });
             }
             
             var bestNode = currentNode.findBestLeafNode();
@@ -1452,10 +1459,28 @@ public static class Program
             .OrderByDescending(i => (10000 * i.Length) / i.ToLowerInvariant().Count(c => Constants.DownMoves.Contains(c)))
             .ToList();
 
-        var output = input.sourceSeeds
-            .Where(seed => !commandLineParams.randomSeed.HasValue || seed == commandLineParams.randomSeed.Value)
-            .Select(seed => solve(commandLineParams, input, seed))
-            .ToList();
+        var threads = new List<Thread>();
+        var output = new List<AnnotatedOutput>();
+        foreach (var seed_ in input.sourceSeeds)
+        {
+            var seed = seed_;
+            var thread = new Thread(() =>
+            {
+                var ans = solve(commandLineParams, input, seed);
+                lock (output)
+                {
+                    output.Add(ans);
+                }
+            });
+
+            threads.Add(thread);
+            thread.Start();
+        }
+
+        foreach (var thread in threads)
+        {
+            thread.Join();
+        }
 
         // show(input, output.First().output.seed, output.First().output.solution);
 
