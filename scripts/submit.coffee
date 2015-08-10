@@ -11,7 +11,39 @@ apiToken = 'rTtrTF3dLjQK/pN16VMLkg6zxstoXlwOUa06jqRVr48='
 commit = process.argv[2]
 timeLimitSeconds = Number(process.argv[3])
 teamId = 183
-problemSet = [0 .. 24]
+problemSet = [0]
+cutoff = []
+cutoff[0] = 300
+cutoff[1] = 1000
+cutoff[10] = 1000
+cutoff[13] = 1000
+cutoff[14] = 1000
+cutoff[15] = 1000
+cutoff[16] = 2000
+cutoff[17] = 2000
+cutoff[18] = 1000
+cutoff[19] = 2000
+cutoff[20] = 2000
+cutoff[21] = 1000
+cutoff[22] = 3000
+cutoff[23] = 1000
+
+pops = []
+pops[0] = ['Ei!', 'Ia! Ia!', 'R\'lyeh', 'Yuggoth']
+pops[1] = ['Cthulhu']
+pops[10] = ['fhtagn']
+pops[13] = ['niggurath']
+pops[14] = ['Ph\'nglui Mglw\'nafh Cthulhu R\'lyeh wgah\'nagl fhtagn.']
+pops[15] = ['Lovecraft']
+pops[16] = ['davar']
+pops[17] = ['Dagon']
+pops[18] = ['Azathoth']
+pops[19] = ['Yog']
+pops[20] = ['Nug']
+pops[21] = ['Bigboote']
+pops[22] = ['uaah']
+pops[23] = []
+
 problemFiles = ('problem_' + i for i in problemSet)
 phrasesOfPower = [
     'Ei!'
@@ -38,7 +70,11 @@ upload = (problemKey, ans) ->
         console.log e
         
 runOne = (problem, cb) ->
+    xx = Number(problem.file.substr(8))
+    
     cmd = []
+    #cmd.push('-x')
+    #cmd.push(cutoff[xx])
     cmd.push('-f')
     cmd.push "../problems/#{problem.file}.json"
     cmd.push('-r')
@@ -46,6 +82,7 @@ runOne = (problem, cb) ->
     cmd.push('-t')
     cmd.push(timeLimitSeconds)
     for phrase in phrasesOfPower
+    #for phrase in pops[xx]
         cmd.push('-p')
         cmd.push(phrase)
 
@@ -72,6 +109,8 @@ runOne = (problem, cb) ->
             
             if ans.score >= bestScore
                 data.best = ans
+            
+            #ans.output.tag = 'testing'
             
             #upload(problemKey, [ans.output]) if ans.score > bestScore
             

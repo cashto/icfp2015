@@ -440,18 +440,39 @@ class BoardTree
         return string.Format("level={0}, score={1}, heuristic={2}", level, this.board.score, this.board.heuristicScore);
     }
 
-    public BoardTree solve(List<Unit> pieces, TimeSpan timeout)
+    public BoardTree solve(List<Unit> pieces, CommandLineParams commandLineParams)
     {
+        var ply = Constants.LookaheadSearchPly;
         var currentNode = this;
         var startTime = DateTime.UtcNow;
+        var lastUpdate = startTime;
 
-        while (currentNode.level < pieces.Count &&
-            DateTime.UtcNow - startTime < timeout)
+        while (currentNode.level + Constants.LookaheadSearchDepth < pieces.Count &&
+            DateTime.UtcNow - startTime < commandLineParams.timeLimit)
         {
-            var depthToSearch = Math.Min(Constants.LookaheadSearchDepth, pieces.Count - currentNode.level);
-            for (var i = 0; i < depthToSearch; ++i)
+            if (!commandLineParams.timeLimit.Equals(DateTime.MaxValue) &&
+                DateTime.UtcNow - lastUpdate > TimeSpan.FromTicks(commandLineParams.timeLimit.Ticks / 10))
             {
-                currentNode.walk(node => node.expand(pieces[node.level]));
+                var fractionComplete = currentNode.level / (double)pieces.Count;
+                var fractionTimeUsed = (DateTime.UtcNow.AddSeconds(5) - startTime).Ticks / (double)commandLineParams.timeLimit.Ticks;
+
+                if (fractionTimeUsed > fractionComplete)
+                {
+                    ply = Math.Max(ply - 1, 2);
+                }
+                else
+                {
+                    ply = Math.Min(ply + 1, 6);
+                }
+
+                lastUpdate = DateTime.UtcNow;
+            }
+
+            Program.Log(ply.ToString());
+            
+            for (var i = 0; i < Constants.LookaheadSearchDepth; ++i)
+            {
+                currentNode.walk(node => node.expand(pieces[node.level], ply));
             }
             
             var bestNode = currentNode.findBestLeafNode();
@@ -474,18 +495,23 @@ class BoardTree
                 bestNode = currentNode.findBestLeafNode();
             }
 
-            currentNode = bestNode;
+            currentNode = bestNode.walkToRoot().Skip(Constants.LookaheadSearchDepth - 1).First();
 
             foreach (var node in currentNode.walkToRoot().Skip(3).Reverse())
             {
                 node.insertPhrasesOfPowerAndLockingMove();
+                if (commandLineParams.cutoff.HasValue &&
+                    node.board.score + node.board.bonusPoints > commandLineParams.cutoff.Value)
+                {
+                    return findBestLeafNode(true /*includeDisappointments*/);
+                }
             }
         }
         
         return findBestLeafNode(true /*includeDisappointments*/);
     }
 
-    private bool expand(Unit unit)
+    private bool expand(Unit unit, int ply)
     {
         if (children != null)
         {
@@ -497,13 +523,13 @@ class BoardTree
             return false;
         }
 
-        Program.Log("Expanding {0}", this);
+        // Program.Log("Expanding {0}", this);
         var inaccessibleSet = new HashSet<Unit>();
 
         this.children = generateGoals(unit)
             .Select(goal => generatePath(this.board, unit, goal, inaccessibleSet))
             .Where(child => child != null)
-            .Take(Constants.LookaheadSearchPly)
+            .Take(ply)
             .ToList();
 
         return this.children.Any();
@@ -658,7 +684,7 @@ class BoardTree
             return this;
         }
 
-        Program.Log("inserting phrase of power {0}", this);
+        // Program.Log("inserting phrase of power {0}", this);
 
         this.board.usedPhrasesOfPower = this.parent.board.usedPhrasesOfPower.ToList();
         this.board.bonusPoints = this.parent.board.bonusPoints;
@@ -667,21 +693,14 @@ class BoardTree
         this.oldPath = this.path;
 
         // Insert as many phrases of power as possible.
-        if (true)
+        var start = this.start;
+        var extraIllegalSet = new HashSet<Unit>();
+        while (insertOnePhraseOfPower(ref path, ref start, this.end))
         {
-            var start = this.start;
-            var extraIllegalSet = new HashSet<Unit>();
-            while (insertOnePhraseOfPower(ref path, ref start, this.end))
-            {
-            }
+        }
 
-            var endPath = generatePath(this.parent.board, start, this.end, new HashSet<Unit>());
-            path += endPath.path;
-        }
-        else
-        {
-            path = this.path;
-        }
+        var endPath = generatePath(this.parent.board, start, this.end, new HashSet<Unit>());
+        path += endPath.path;
 
         // Add locking move.
         path += Constants.ForwardMoves.First(dir => !this.parent.board.contains(this.end.go(dir)));
@@ -924,7 +943,7 @@ class BoardTree
     public string path;
     public string oldPath;
 
-    private BoardTree parent;
+    public BoardTree parent;
     private List<BoardTree> children;
     private bool isDisappointment;
     private int level;
@@ -1229,6 +1248,11 @@ class CommandLineParams
                     argsEnum.MoveNext();
                     movesToShow = argsEnum.Current;
                     break;
+
+                case "-x":
+                    argsEnum.MoveNext();
+                    cutoff = int.Parse(argsEnum.Current);
+                    break;
             }
         }
     }
@@ -1240,6 +1264,7 @@ class CommandLineParams
     public int cores { get; set; }
     public UInt32? randomSeed { get; set; }
     public string movesToShow { get; set; }
+    public int? cutoff{ get; set; }
 }
 
 
@@ -1324,14 +1349,19 @@ public static class Program
         }
 
         var tree = new BoardTree(new Board(input));
-        var ans = tree.solve(source, commandLineParams.timeLimit);
+        var ans = tree.solve(source, commandLineParams);
         string solution = ans.getFullPath();
 
         foreach (var node in ans.walkToRoot().Reverse())
         {
             Program.Log(node.ToString());
-            Program.Log(node.oldPath ?? "none"); 
-            Program.Log(node.path);
+            if (node.board.linesRemoved > 1 || (node.parent != null && node.parent.board.linesRemoved > 1))
+            {
+                Program.Log(node.board.linesRemoved.ToString());
+            }
+
+        //    Program.Log(node.oldPath ?? "none"); 
+        //    Program.Log(node.path);
             Program.Log(node.board.ToString(node.end));
             Program.Log("");
         }
@@ -1427,13 +1457,13 @@ public static class Program
             .Select(seed => solve(commandLineParams, input, seed))
             .ToList();
 
-        //show(input, output.First().output.seed, output.First().output.solution);
+        // show(input, output.First().output.seed, output.First().output.solution);
 
         Console.WriteLine(JsonConvert.SerializeObject(output, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }));
     }
 
     public static void Log(string format, params object[] data)
     {
-        //Console.WriteLine(format, data);
+        // Console.WriteLine(format, data);
     }
 }
