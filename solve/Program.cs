@@ -730,7 +730,7 @@ class BoardTree
         {
             foreach (var phraseStart in board.getPossibleLocations(start))
             {
-                var phraseEnd = this.board.findEndCell(phraseStart, phrase);
+                var phraseEnd = this.parent.board.findEndCell(phraseStart, phrase);
                 if (phraseEnd == null)
                 {
                     continue;
