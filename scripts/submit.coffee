@@ -11,7 +11,7 @@ apiToken = 'rTtrTF3dLjQK/pN16VMLkg6zxstoXlwOUa06jqRVr48='
 commit = process.argv[2]
 timeLimitSeconds = Number(process.argv[3])
 teamId = 183
-problemSet = [0 ... 23]
+problemSet = [0 .. 24]
 problemFiles = ('problem_' + i for i in problemSet)
 phrasesOfPower = [
     'Ei!'

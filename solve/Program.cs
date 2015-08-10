@@ -163,7 +163,7 @@ class GoalHeuristic : IComparable<GoalHeuristic>
         }
 
         int targetRow = (uppermostNonemptyRow == board.height - 1) ? board.width : board.lineCount(uppermostNonemptyRow + 1);
-        // neighborCount /= 4;
+        neighborCount /= 4;
     }
 
     public override string ToString()
@@ -236,7 +236,7 @@ class Board
         }
 
         int points = piece.members.Count + 100 * (1 + linesRemoved) * linesRemoved / 2;
-        int lineBonus = this.linesRemoved > 1 ? (this.linesRemoved - 1) * points / 10 : 0;
+        int lineBonus = parent.linesRemoved > 1 ? (parent.linesRemoved - 1) * points / 10 : 0;
         this.score = parent.score + points + lineBonus;
 
         this.heuristicScore = new GoalHeuristic(this);
@@ -622,24 +622,6 @@ class BoardTree
 
                 if (newNode.Piece.Equals(start))
                 {
-                    var ans = newNode.getReversePath();
-
-                    // Sanity check.
-                    //if (!start.go(ans).Equals(end))
-                    //{
-                    //    throw new Exception();
-                    //}
-
-                    //var idx = 0;
-                    //for (var t = newNode; t.Parent != null; t = t.Parent)
-                    //{
-                    //    if (!t.Piece.go(ans.Substring(ans.Length - 1 - idx)).Equals(end))
-                    //    {
-                    //        throw new Exception();
-                    //    }
-                    //    ++idx;
-                    //}
-
                     return new BoardTree(
                         new Board(board, end),
                         newNode.getReversePath(),
@@ -776,29 +758,29 @@ class BoardTree
                 }
 
                 // Sanity check.
-                var totalPath = path + pathToPhrase.path + phrase + pathAfterPhrase.path;
-                if (checkAgainstIllegalSet(
-                    new HashSet<Unit>(),
-                    this.start,
-                    totalPath))
-                {
-                    throw new Exception();
-                }
+                //var totalPath = path + pathToPhrase.path + phrase + pathAfterPhrase.path;
+                //if (checkAgainstIllegalSet(
+                //    new HashSet<Unit>(),
+                //    this.start,
+                //    totalPath))
+                //{
+                //    throw new Exception();
+                //}
 
-                var t = this.start;
-                foreach (var c in totalPath)
-                {
-                    t = t.go(c);
-                    if (!this.parent.board.contains(t))
-                    {
-                        throw new Exception();
-                    }
-                }
+                //var t = this.start;
+                //foreach (var c in totalPath)
+                //{
+                //    t = t.go(c);
+                //    if (!this.parent.board.contains(t))
+                //    {
+                //        throw new Exception();
+                //    }
+                //}
 
-                if (!t.Equals(this.end))
-                {
-                    throw new Exception();
-                }
+                //if (!t.Equals(this.end))
+                //{
+                //    throw new Exception();
+                //}
 
                 path += pathToPhrase.path + phrase;
                 start = phraseEnd;
@@ -1445,13 +1427,13 @@ public static class Program
             .Select(seed => solve(commandLineParams, input, seed))
             .ToList();
 
-        show(input, output.First().output.seed, output.First().output.solution);
+        //show(input, output.First().output.seed, output.First().output.solution);
 
         Console.WriteLine(JsonConvert.SerializeObject(output, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }));
     }
 
     public static void Log(string format, params object[] data)
     {
-        Console.WriteLine(format, data);
+        //Console.WriteLine(format, data);
     }
 }
