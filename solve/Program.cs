@@ -643,12 +643,14 @@ class BoardTree
     {
         Console.WriteLine("inserting phrase of power");
 
-        if (this.level == 0)
+        if (this.parent == null)
         {
             return this;
         }
 
         var path = "";
+        var temp = this.board;
+        this.board = parent.board;
 
         // Insert as many phrases of power as possible.
         var start = this.start;
@@ -664,6 +666,7 @@ class BoardTree
         path += Constants.ForwardMoves.First(dir => !this.board.contains(this.end.go(dir)));
         
         this.path = path;
+        this.board = temp;
 
         return this;
     }
@@ -673,6 +676,9 @@ class BoardTree
         ref Unit start, 
         Unit end)
     {
+        var inaccessibleSet = new HashSet<Unit>();
+        var emptySet = new HashSet<Unit>();
+
         // Prefer to try unused phrases first.
         var unusedPhrases = new List<string>();
         var usedPhrases = new List<string>();
@@ -696,14 +702,19 @@ class BoardTree
                     break;
                 }
 
-                var inaccessibleSet = new HashSet<Unit>();
-                var illegalSet = new HashSet<Unit>();
+                // Optimization: generate one path with the empty set of illegal moves in order to populate the inaccessible set.
+                var test = this.generatePath(start, phraseStart, inaccessibleSet, emptySet);
+                if (test == null)
+                {
+                    continue;
+                }
 
+                var illegalSet = new HashSet<Unit>();
                 addToIllegalSet(illegalSet, phraseStart, phrase);
                 illegalSet.Remove(phraseStart);
                 addToIllegalSet(illegalSet, this.start, path);
-                
-                var pathToPhrase = this.generatePath(start, phraseStart, inaccessibleSet, illegalSet);
+
+                var pathToPhrase = this.generatePath(start, phraseStart, new HashSet<Unit>(), illegalSet);
                 if (pathToPhrase == null)
                 {
                     continue;
@@ -719,18 +730,10 @@ class BoardTree
                 addToIllegalSet(illegalSet, start, pathToPhrase.path);
                 illegalSet.Add(phraseStart);
 
-                var pathAfterPhrase = this.generatePath(phraseEnd, end, inaccessibleSet, illegalSet);
+                var pathAfterPhrase = this.generatePath(phraseEnd, end, new HashSet<Unit>(), illegalSet);
                 if (pathAfterPhrase == null)
                 {
                     continue;
-                }
-
-                if (checkAgainstIllegalSet(
-                    new HashSet<Unit>(), 
-                    this.start, 
-                    path + pathToPhrase.path + phrase + pathAfterPhrase.path))
-                {
-                    throw new Exception();
                 }
 
                 path += pathToPhrase.path + phrase;
@@ -1271,7 +1274,9 @@ public static class Program
 
         var tree = new BoardTree(new Board(input));
         var ans = tree.solve(source, commandLineParams.timeLimit);
+        var startTime = DateTime.UtcNow;
         string solution = ans.getFullPath();
+        Console.WriteLine((DateTime.UtcNow - startTime).Ticks);
 
         return new AnnotatedOutput()
         {
